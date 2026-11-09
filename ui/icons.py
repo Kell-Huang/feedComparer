@@ -44,12 +44,6 @@ _BODIES = {
     ),
 
     'stop': '<rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1.4" fill="{c}"/>',
-
-    'folder': (
-        '<path d="M2.4 4.6c0-.6.5-1.1 1.1-1.1h2.3l1.2 1.4h4.5c.6 0 1.1.5 1.1 1.1v5.4'
-        'c0 .6-.5 1.1-1.1 1.1H3.5c-.6 0-1.1-.5-1.1-1.1z" fill="none" stroke="{c}" '
-        'stroke-width="1.4" stroke-linejoin="round"/>'
-    ),
 }
 
 

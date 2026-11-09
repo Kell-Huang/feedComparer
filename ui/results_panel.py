@@ -51,8 +51,6 @@ MAX_CELL_TEXT = 80
 MAX_LOG_LINES = 20_000
 
 TAB_SUMMARY = 0
-TAB_COLUMN_RATES = 1
-TAB_DEBUG_LOG = 2
 
 RIGHT = Qt.AlignRight | Qt.AlignVCenter
 LEFT = Qt.AlignLeft | Qt.AlignVCenter

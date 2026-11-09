@@ -1,13 +1,18 @@
-"""Design tokens and stylesheet loading.
+"""Stylesheet loading and the few colours Python paints with.
 
-One place for the palette, the spacing scale and the type scale, so Python
-code that paints (badges, delegates) and the Qt stylesheet cannot drift apart.
+The visual system itself lives in ``styles/main.qss`` — that file is the single
+source of truth for surfaces, borders, spacing and type. This module only
+exposes the handful of colours that are applied from code rather than from the
+stylesheet (status pills, coloured table cells), plus the loader that resolves
+the ``@ASSETS@`` token.
 
-The stylesheet is a plain .qss file with an ``@ASSETS@`` token that gets
-replaced by the absolute path of the ``assets`` directory at load time.
-Relative ``url(...)`` paths inside QSS resolve against the process working
-directory, which breaks as soon as the app is launched from elsewhere, so the
-substitution is not optional.
+Keeping a second copy of the whole palette here would be a trap: editing it
+would change nothing on screen, because Qt applies the QSS values.
+
+The ``@ASSETS@`` token is replaced with the absolute path of the ``assets``
+directory at load time. Relative ``url(...)`` paths inside QSS resolve against
+the process working directory, which breaks as soon as the app is launched
+from somewhere else, so the substitution is not optional.
 """
 from pathlib import Path
 
@@ -17,49 +22,21 @@ ASSETS_DIR = APP_ROOT / "assets"
 STYLE_PATH = APP_ROOT / "styles" / "main.qss"
 
 
-# --- Surfaces -------------------------------------------------------------
-CANVAS = '#f4f5f7'          # window background
-SURFACE = '#ffffff'         # cards, inputs, table body
-SURFACE_SUNKEN = '#f7f8fa'  # table headers, inert fills
-
-# --- Lines ----------------------------------------------------------------
-BORDER = '#e4e7ec'
-BORDER_STRONG = '#d0d5dd'
-
-# --- Text -----------------------------------------------------------------
-TEXT = '#1f2937'
+# Colours applied from Python (table cells, status pills). These mirror values
+# in main.qss; the stylesheet remains authoritative for everything it styles.
 TEXT_SECONDARY = '#667085'
-TEXT_MUTED = '#98a2b3'
-
-# --- Accent ---------------------------------------------------------------
-PRIMARY = '#2f6fed'
-PRIMARY_HOVER = '#1d5fd8'
-PRIMARY_PRESSED = '#1a4fbf'
-PRIMARY_SOFT = '#eef4ff'
-
-# --- Semantic -------------------------------------------------------------
 SUCCESS = '#0f7b3f'
-SUCCESS_SOFT = '#e7f6ec'
 WARNING = '#b54708'
-WARNING_SOFT = '#fef3e6'
 DANGER = '#b42318'
-DANGER_SOFT = '#fee4e2'
-
-# --- Spacing scale (multiples of 4) ---------------------------------------
-SPACE_XS = 4
-SPACE_SM = 8
-SPACE_MD = 12
-SPACE_LG = 16
-SPACE_XL = 24
 
 
 # Status -> (label, soft background, strong foreground) for table badges.
 STATUS_STYLES = {
-    'PERFECT': ('Perfect', SUCCESS_SOFT, SUCCESS),
+    'PERFECT': ('Perfect', '#e7f6ec', SUCCESS),
     'GOOD': ('Good', '#e8f7f1', '#0f766e'),
-    'FAIR': ('Fair', WARNING_SOFT, WARNING),
+    'FAIR': ('Fair', '#fef3e6', WARNING),
     'POOR': ('Poor', '#fdeceb', '#c4320a'),
-    'BAD': ('Bad', DANGER_SOFT, DANGER),
+    'BAD': ('Bad', '#fee4e2', DANGER),
 }
 
 
