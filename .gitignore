@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environment (recreate with: python -m venv .venv)
+.venv/
+venv/
+
+# Generated run artefacts
+reports/
+api_downloads/
+*.log
+
+# Local agent/tooling state
+.workbuddy-ai/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,24 @@
+# Feed Validator runtime dependencies
+# Install with:  python -m pip install -r requirements.txt
+#
+# Verified against Python 3.13 on Windows with the versions noted below.
+# Upper bounds are pinned to the next major so a surprise breaking release
+# cannot silently change CSV/Excel parsing behaviour.
+
+# --- GUI -------------------------------------------------------------------
+PySide6>=6.6,<7            # tested 6.12.0
+
+# --- Data engine -----------------------------------------------------------
+polars>=1.0,<3             # tested 2.1.0
+fastexcel>=0.9             # REQUIRED: polars.read_excel is unusable without it
+openpyxl>=3.1              # header-only xlsx reads (column picker)
+
+# --- Formats ---------------------------------------------------------------
+lxml>=5.0                  # recovery parsing for malformed XML feeds
+
+# --- Networking ------------------------------------------------------------
+requests>=2.31,<3          # tested 2.34.2
+
+# Note: pandas and numpy are intentionally NOT required. The exporter writes
+# its small summary CSVs with the stdlib csv module, and the diff engine uses
+# Polars throughout.

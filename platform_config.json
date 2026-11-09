@@ -1,0 +1,6 @@
+{
+  "auth_token": "",
+  "base_url": "https://platform-api.productsup.io/platform/v2",
+  "verify_ssl": true,
+  "download_timeout": 120
+}
