@@ -57,22 +57,26 @@ QGroupBox {
     background-color: #ffffff;
     border: 1px solid #e4e7ec;
     border-radius: 10px;
-    margin-top: 14px;
-    padding: 14px 16px 16px 16px;
+    margin-top: 0px;
+    /* Top padding reserves the header row; the title is drawn inside the
+       card instead of on the border. */
+    padding: 38px 16px 16px 16px;
     font-weight: bold;
     font-size: 13px;
 }
 
-/* The title sits on the border line, so it needs the card colour behind it
-   or the line shows through the text. */
+/* The title lives inside the card. Sitting it on the border line meant its
+   opaque background cut the rounded outline, leaving two square notches that
+   fought with the 10px radius. */
 QGroupBox::title {
-    subcontrol-origin: margin;
+    subcontrol-origin: padding;
     subcontrol-position: top left;
-    left: 14px;
-    padding: 0 6px;
-    color: #344054;
-    background-color: #ffffff;
-    font-size: 12px;
+    left: 16px;
+    top: 13px;
+    padding: 0;
+    color: #1f2937;
+    background-color: transparent;
+    font-size: 13px;
     font-weight: bold;
 }
 
