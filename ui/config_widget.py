@@ -115,6 +115,16 @@ class ComparisonConfigWidget(QWidget):
         self.debug_check.setObjectName("debugCheck")
         self.debug_check.setChecked(True)
         flags_layout.addWidget(self.debug_check)
+        # The per-cell diff file can reach millions of rows on a feed where
+        # most cells differ; not every run needs it.
+        self.export_diff_check = QCheckBox("Export Differences")
+        self.export_diff_check.setObjectName("exportDiffCheck")
+        self.export_diff_check.setChecked(True)
+        self.export_diff_check.setToolTip(
+            "Write the per-cell difference file. Turn it off when you only "
+            "need the match rates and the report."
+        )
+        flags_layout.addWidget(self.export_diff_check)
         flags_layout.addStretch()
         grid.addWidget(flags_row, 4, 0, 1, 4)
 
@@ -195,6 +205,7 @@ class ComparisonConfigWidget(QWidget):
             'normalize_sku': self.normalize_check.isChecked(),
             'case_sensitive': self.case_check.isChecked(),
             'debug': self.debug_check.isChecked(),
+            'export_diff': self.export_diff_check.isChecked(),
             'auto_detect': self.auto_detect_check.isChecked(),
             'priority_list': self._priority_list(),
             'exclude_keywords': self._exclude_keywords(),
@@ -207,7 +218,8 @@ class ComparisonConfigWidget(QWidget):
         for widget in (
             self.sku_edit, self.priority_edit, self.cols_edit, self.exclude_edit,
             self.auto_detect_check, self.normalize_check, self.case_check,
-            self.debug_check, self.workers_spin, self.filter_combo,
+            self.debug_check, self.export_diff_check, self.workers_spin,
+            self.filter_combo,
             self.select_cols_btn,
         ):
             widget.setEnabled(not running)

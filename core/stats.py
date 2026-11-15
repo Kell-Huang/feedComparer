@@ -44,6 +44,7 @@ import csv
 import re
 import unicodedata
 from collections import defaultdict
+from functools import lru_cache
 from datetime import date, datetime
 from typing import Dict, List
 
@@ -56,6 +57,11 @@ class ColumnMatchStats:
     _THOUSANDS_RE = re.compile(r'^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$')
     _SEP_DATE_FORMATS = ('%Y-%m-%d', '%Y/%m/%d')
     _COMPACT_DATE_FORMAT = '%Y%m%d'
+    # Every accepted format starts with a four-digit year. `%Y` matches
+    # exactly four digits, so this shape check is not an approximation: it
+    # rejects precisely the strings strptime would reject anyway.
+    _DATE_SHAPE_RE = re.compile(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}')
+    _COMPACT_DATE_RE = re.compile(r'^\d{8}$')
     _ISO_DATETIME_FORMATS = (
         '%Y-%m-%d %H:%M:%S',
         '%Y-%m-%d %H:%M:%S.%f',
@@ -63,7 +69,10 @@ class ColumnMatchStats:
         '%Y-%m-%dT%H:%M:%S.%f',
     )
     _NANOSECOND_RE = re.compile(r'(\.\d{6})\d+')
-    _BUFFER_FLUSH_SIZE = 5000
+    # Rows per write. Chunking is what keeps the peak memory flat when a
+    # column differs on every row: one chunk is built, written, and dropped
+    # instead of holding every diff row of the feed in memory.
+    _WRITE_CHUNK_ROWS = 200_000
 
     @staticmethod
     def _is_empty(val) -> bool:
@@ -110,24 +119,44 @@ class ColumnMatchStats:
             return datetime(val.year, val.month, val.day)
         if isinstance(val, str):
             s = val.strip()
-            if not s:
+            if not s or not ColumnMatchStats._looks_like_date(s, allow_compact):
                 return None
-            for fmt in ColumnMatchStats._SEP_DATE_FORMATS:
-                try:
-                    return datetime.strptime(s, fmt)
-                except ValueError:
-                    continue
-            if allow_compact:
-                try:
-                    return datetime.strptime(s, ColumnMatchStats._COMPACT_DATE_FORMAT)
-                except ValueError:
-                    pass
-            s_trunc = ColumnMatchStats._normalize_nanos(s)
-            for fmt in ColumnMatchStats._ISO_DATETIME_FORMATS:
-                try:
-                    return datetime.strptime(s_trunc, fmt)
-                except ValueError:
-                    continue
+            return ColumnMatchStats._parse_date_string(s, allow_compact)
+        return None
+
+    @staticmethod
+    def _looks_like_date(s: str, allow_compact: bool) -> bool:
+        """Cheap shape gate before the expensive parsing.
+
+        Without it, every pair of differing values paid for twelve strptime
+        calls — a product title was probed as six date formats twice. One
+        regex match is ~70x cheaper and rejects exactly what strptime would.
+        """
+        if ColumnMatchStats._DATE_SHAPE_RE.match(s):
+            return True
+        return bool(allow_compact
+                    and ColumnMatchStats._COMPACT_DATE_RE.match(s))
+
+    @staticmethod
+    @lru_cache(maxsize=4096)
+    def _parse_date_string(s: str, allow_compact: bool):
+        """strptime itself, cached: a feed repeats the same dates many times."""
+        for fmt in ColumnMatchStats._SEP_DATE_FORMATS:
+            try:
+                return datetime.strptime(s, fmt)
+            except ValueError:
+                continue
+        if allow_compact:
+            try:
+                return datetime.strptime(s, ColumnMatchStats._COMPACT_DATE_FORMAT)
+            except ValueError:
+                pass
+        s_trunc = ColumnMatchStats._normalize_nanos(s)
+        for fmt in ColumnMatchStats._ISO_DATETIME_FORMATS:
+            try:
+                return datetime.strptime(s_trunc, fmt)
+            except ValueError:
+                continue
         return None
 
     @staticmethod
@@ -203,6 +232,50 @@ class ColumnMatchStats:
         return series.is_null()
 
     # ------------------------------------------------------------------
+    # Diff rows
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _as_text(series: pl.Series) -> pl.Series:
+        """Column values as text, matching what ``str()`` used to produce.
+
+        Polars renders booleans as "true"/"false" where Python writes
+        "True"/"False"; the diff file is a user-facing artefact, so keep the
+        Python spelling rather than silently changing it.
+        """
+        if series.dtype == pl.Boolean:
+            return (series.cast(pl.String, strict=False)
+                    .str.replace_all("true", "True")
+                    .str.replace_all("false", "False"))
+        return series.cast(pl.String, strict=False).fill_null("")
+
+    @staticmethod
+    def _diff_frame(df1_common: pl.DataFrame, s1: pl.Series, s2: pl.Series,
+                    e1: pl.Series, e2: pl.Series, column: str,
+                    chunk: List[int]) -> pl.DataFrame:
+        """One chunk of diff rows, built with gathers so Polars does the rest.
+
+        The old loop ran ``str()`` three times per differing cell and handed
+        the result to the csv module; this builds the same four columns with
+        vectorised gathers and lets the Rust writer serialise them.
+        """
+        mask1 = e1.gather(chunk)
+        mask2 = e2.gather(chunk)
+        frame = pl.DataFrame({
+            "sku": (df1_common["_sku_norm"].gather(chunk)
+                    .cast(pl.String, strict=False).fill_null("")),
+            "value_file1": ColumnMatchStats._as_text(s1.gather(chunk)),
+            "value_file2": ColumnMatchStats._as_text(s2.gather(chunk)),
+        })
+        return frame.with_columns([
+            pl.when(mask1 & ~mask2).then(pl.lit("EMPTY"))
+            .otherwise(pl.col("value_file1")).alias("value_file1"),
+            pl.when(mask2 & ~mask1).then(pl.lit("EMPTY"))
+            .otherwise(pl.col("value_file2")).alias("value_file2"),
+            pl.lit(column, dtype=pl.String).alias("column"),
+        ]).select(["sku", "column", "value_file1", "value_file2"])
+
+    # ------------------------------------------------------------------
     # Entry point
     # ------------------------------------------------------------------
 
@@ -214,23 +287,27 @@ class ColumnMatchStats:
         Precondition: df1_common and df2_common are row-aligned on _sku_norm
         (guaranteed by FastBatchValidator._align_dataframes).
 
-        Differences are buffered and flushed in batches to reduce I/O overhead.
+        Differences are streamed to ``diff_csv_path`` in chunks. Pass ``None``
+        to compute the numbers without writing the file — the detail export is
+        optional, and skipping it avoids a lot of I/O on a feed where most
+        cells differ.
         """
         stats = {}
-        skus = df1_common['_sku_norm'].to_list()
+        row_count = df1_common.height
         values_equal = ColumnMatchStats._values_equal
 
-        with open(diff_csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.writer(f)
-            writer.writerow(['sku', 'column', 'value_file1', 'value_file2'])
-
-            buffer = []
-
-            def flush():
-                if buffer:
-                    writer.writerows(buffer)
-                    buffer.clear()
-
+        # The diff file is optional: with no path, the comparison still runs
+        # and every counter is still produced, only nothing is written.
+        stream = open(diff_csv_path, 'wb') if diff_csv_path else None
+        if stream is not None:
+            # The header goes in up front, so a file with no differences still
+            # has one — the export is read by people, not just by this code.
+            ColumnMatchStats._diff_frame(
+                df1_common, df1_common['_sku_norm'], df1_common['_sku_norm'],
+                pl.Series([], dtype=pl.Boolean), pl.Series([], dtype=pl.Boolean),
+                '', [],
+            ).write_csv(stream, include_header=True, include_bom=True)
+        try:
             for col in compare_cols:
                 if col not in df1_common.columns or col not in df2_common.columns:
                     continue
@@ -274,28 +351,20 @@ class ColumnMatchStats:
                 equivalent = len(need_idx) - len(failing)
                 exact_matches = both_nan + int(exact_fast.sum()) + equivalent
                 mismatches = only1_count + only2_count + len(failing)
-                total_compared = len(skus)
+                total_compared = row_count
 
                 # Emit mismatch rows in DataFrame order for a stable diff file.
                 only1_idx = only1.arg_true().to_list()
                 only2_idx = only2.arg_true().to_list()
-                if only1_idx or only2_idx or failing:
+                if stream is not None and (only1_idx or only2_idx or failing):
                     mismatch_idx = sorted(set(only1_idx) | set(only2_idx) | failing)
-                    v1_all = s1.gather(mismatch_idx).to_list()
-                    v2_all = s2.gather(mismatch_idx).to_list()
-                    e1_sel = e1.gather(mismatch_idx).to_list()
-                    e2_sel = e2.gather(mismatch_idx).to_list()
-                    for pos, idx in enumerate(mismatch_idx):
-                        if e1_sel[pos] and not e2_sel[pos]:
-                            row = [str(skus[idx]), col, 'EMPTY', str(v2_all[pos])]
-                        elif e2_sel[pos] and not e1_sel[pos]:
-                            row = [str(skus[idx]), col, str(v1_all[pos]), 'EMPTY']
-                        else:
-                            row = [str(skus[idx]), col,
-                                   str(v1_all[pos]), str(v2_all[pos])]
-                        buffer.append(row)
-                        if len(buffer) >= ColumnMatchStats._BUFFER_FLUSH_SIZE:
-                            flush()
+                    for start in range(0, len(mismatch_idx),
+                                       ColumnMatchStats._WRITE_CHUNK_ROWS):
+                        chunk = mismatch_idx[start:start
+                                             + ColumnMatchStats._WRITE_CHUNK_ROWS]
+                        frame = ColumnMatchStats._diff_frame(
+                            df1_common, s1, s2, e1, e2, col, chunk)
+                        frame.write_csv(stream, include_header=False)
 
                 match_rate = (exact_matches / total_compared * 100) if total_compared > 0 else 0
                 if match_rate == 100:
@@ -319,8 +388,9 @@ class ColumnMatchStats:
                     'match_rate': round(match_rate, 2),
                     'status': status,
                 }
-
-            flush()
+        finally:
+            if stream is not None:
+                stream.close()
         return stats
 
     @staticmethod

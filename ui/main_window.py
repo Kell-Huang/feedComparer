@@ -362,6 +362,7 @@ class MainWindow(QMainWindow):
             auto_detect=config.get('auto_detect', True),
             priority_list=config.get('priority_list'),
             exclude_keywords=config.get('exclude_keywords'),
+            export_diff=config.get('export_diff', True),
             download_workers=config.get('workers', 4),
             validate_workers=config.get('workers', 4),
             download_timeout=int(self._config.get('download_timeout', 120)),

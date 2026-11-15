@@ -40,7 +40,7 @@ from PySide6.QtWidgets import (
 )
 
 from .delegates import BadgeDelegate
-from .format import floor_percent
+from .format import format_percent
 from .theme import (
     DANGER,
     SUCCESS,
@@ -151,11 +151,18 @@ class ResultsPanel(QWidget):
 
         self.column_table = QTableWidget(0, 9)
         self.column_table.setObjectName("ColumnTable")
+        # Header wording: "Status" was vague next to a quality badge, and
+        # "Matches/Mismatches/Total" read as the same thing three times.
         self.column_table.setHorizontalHeaderLabels([
-            'Column', 'Status', 'Match Rate', 'Matches',
-            'Mismatches', 'Total', 'Both Empty', 'One-side Empty', 'Pairs',
+            'Column', 'Quality', 'Match %', 'Matched', 'Different',
+            'Compared', 'Empty (both)', 'Empty (one side)', 'In Pairs',
         ])
         self._configure_table(self.column_table, stretch_column=0)
+        # "100.00%" needs more room than the content-driven sizing gave it on
+        # a table whose other columns are short.
+        rate_header = self.column_table.horizontalHeader()
+        rate_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        self.column_table.setColumnWidth(2, 96)
         self.column_table.setItemDelegateForColumn(1, BadgeDelegate(self.column_table))
         pairs_header = self.column_table.horizontalHeaderItem(8)
         if pairs_header is not None:
@@ -182,9 +189,13 @@ class ResultsPanel(QWidget):
 
         self.file_table = QTableWidget(0, 10)
         self.file_table.setObjectName("FileTable")
+        # These two columns hold SKUs present on one side only. "Miss F2"
+        # read as "F2 is missing"; "File 1 only" states which side the SKUs
+        # are on, and keeps the header order matching the data order.
         self.file_table.setHorizontalHeaderLabels([
-            'File', 'Pair ID', 'Status', 'SKU Col / Detail',
-            'Rows F1', 'Rows F2', 'Common SKUs', 'Diffs', 'Miss F2', 'Miss F1',
+            'File', 'Pair', 'Status', 'SKU Column / Error',
+            'Rows 1', 'Rows 2', 'Common', 'Differences',
+            'File 1 only', 'File 2 only',
         ])
         self._configure_table(self.file_table, stretch_column=0)
         self.tabs.addTab(self.file_table, "Files")
@@ -381,7 +392,7 @@ class ResultsPanel(QWidget):
         parts.append(kv('Common SKUs compared', f'{total_skus:,}'))
         parts.append(kv('Differences found', f'{total_diffs:,}'))
         parts.append(kv('Missing SKUs', f'{total_missing:,}'))
-        parts.append(kv('Overall match rate', floor_percent(avg_rate)))
+        parts.append(kv('Overall match rate', format_percent(avg_rate)))
         parts.append('</table>')
 
         parts.append(
@@ -491,11 +502,15 @@ class ResultsPanel(QWidget):
             self.column_table.setItem(row, 0, QTableWidgetItem(col))
 
             badge = QTableWidgetItem(label_text)
+            # The delegate paints the pill, but the item's own alignment is
+            # kept in sync with the centred header so the two cannot drift if
+            # the delegate is ever removed.
+            badge.setTextAlignment(Qt.AlignCenter)
             badge.setData(Qt.UserRole, (label_text, background, foreground))
-            badge.setToolTip(f"{rate:.1f}% match")
+            badge.setToolTip(f"{rate:.2f}% match")
             self.column_table.setItem(row, 1, badge)
 
-            rate_item = _number_cell(floor_percent(rate))
+            rate_item = _number_cell(format_percent(rate))
             rate_item.setForeground(QColor(foreground))
             rate_item.setFont(_bold(self.column_table.font()))
             self.column_table.setItem(row, 2, rate_item)
@@ -699,10 +714,13 @@ class ResultsPanel(QWidget):
                 continue
 
         if not preview_rows:
-            self._show_empty_message(
-                self.diff_table, 5,
-                "No cell-level differences to preview."
-            )
+            if results.get('diff_export_enabled') is False:
+                message = ("Difference export was turned off for this run. "
+                           "Tick 'Export Differences' before starting to "
+                           "get the per-cell detail.")
+            else:
+                message = "No cell-level differences to preview."
+            self._show_empty_message(self.diff_table, 5, message)
             return
 
         self.diff_table.setRowCount(len(preview_rows))

@@ -682,15 +682,112 @@ def test_app_icon_asset_loads():
     assert {16, 32, 256} <= sizes, sizes
 
 
-def test_match_rate_is_floored_not_rounded():
+def test_match_rate_keeps_two_decimals():
     """99.6% must not read as 100%: that would claim there are no differences."""
-    from ui.format import floor_percent
+    from ui.format import format_percent
 
-    assert floor_percent(100) == "100%"
-    assert floor_percent(99.6) == "99%"
-    assert floor_percent(99.999) == "99%"
-    assert floor_percent(0.9) == "0%"
-    assert floor_percent(0) == "0%"
-    assert floor_percent(None) == "0%"
-    assert floor_percent(150) == "100%"      # clamped, never over 100
-    assert floor_percent(-5) == "0%"
+    assert format_percent(100) == "100.00%"
+    assert format_percent(99.6) == "99.60%"
+    assert format_percent(99.999) == "100.00%"      # rounded at the 2nd decimal
+    assert format_percent(0.9) == "0.90%"
+    assert format_percent(0) == "0.00%"
+    assert format_percent(None) == "0.00%"
+    assert format_percent(150) == "100.00%"         # clamped
+    assert format_percent(-5) == "0.00%"
+
+
+def test_export_differences_is_a_config_option():
+    _app()
+    from ui.config_widget import ComparisonConfigWidget
+
+    widget = ComparisonConfigWidget(['stock'])
+    assert widget.get_config()['export_diff'] is True     # on by default
+
+    widget.export_diff_check.setChecked(False)
+    assert widget.get_config()['export_diff'] is False
+
+    widget.set_running(True)
+    assert not widget.export_diff_check.isEnabled()       # locked mid-run
+    widget.deleteLater()
+
+
+def test_differences_tab_explains_a_disabled_export():
+    """With the export off there are no files, and the tab has to say why."""
+    _app()
+    from ui.results_panel import ResultsPanel
+
+    panel = ResultsPanel()
+    panel.render({
+        'files': {
+            'a.csv': {'status': 'success', 'pair_id': 'p1', 'summary': {},
+                      'column_stats': {'title': {}}, 'diff_csv_path': ''},
+        },
+        'overall': {'total_pairs': 1, 'success': 1, 'skipped': 0,
+                    'total_skus': 1, 'total_diffs': 0, 'total_missing': 0,
+                    'avg_match_rate': 100},
+        'overall_column_stats': {},
+        'debug_logs': [], 'sku_detection_log': [], 'source': 'file',
+        'diff_export_enabled': False,
+    })
+    text = panel.diff_table.item(0, 0).text()
+    assert 'turned off' in text, text
+    panel.deleteLater()
+
+
+def test_differences_tab_says_nothing_to_show_when_export_was_on():
+    _app()
+    from ui.results_panel import ResultsPanel
+
+    panel = ResultsPanel()
+    panel.render({
+        'files': {
+            'a.csv': {'status': 'success', 'pair_id': 'p1', 'summary': {},
+                      'column_stats': {}, 'diff_csv_path': ''},
+        },
+        'overall': {'total_pairs': 1, 'success': 1, 'skipped': 0,
+                    'total_skus': 1, 'total_diffs': 0, 'total_missing': 0,
+                    'avg_match_rate': 100},
+        'overall_column_stats': {},
+        'debug_logs': [], 'sku_detection_log': [], 'source': 'file',
+        'diff_export_enabled': True,
+    })
+    text = panel.diff_table.item(0, 0).text()
+    assert 'No cell-level differences' in text, text
+    panel.deleteLater()
+
+
+def _horizontal(alignment) -> str:
+    from PySide6.QtCore import Qt
+
+    if alignment & Qt.AlignRight:
+        return "right"
+    if alignment & Qt.AlignHCenter:
+        return "center"
+    return "left"
+
+
+def test_table_headers_align_with_their_cells():
+    """Every column heading sits over the same edge as the values below it.
+
+    Qt centres header text unless told otherwise, so a right-aligned number
+    column ends up with its heading floating over the middle. Checked for the
+    two data tables; the diff table is left-aligned throughout.
+    """
+    _app()
+    from ui.results_panel import ResultsPanel
+
+    panel = ResultsPanel()
+    panel.render(_results())
+
+    for name, table in (("rates", panel.column_table), ("files", panel.file_table)):
+        assert table.rowCount() > 0, name
+        for column in range(table.columnCount()):
+            header = table.horizontalHeaderItem(column)
+            cell = table.item(0, column)
+            if header is None or cell is None:
+                continue
+            assert _horizontal(header.textAlignment()) == _horizontal(cell.textAlignment()), \
+                f"{name} column {column} ({header.text()}): header " \
+                f"{_horizontal(header.textAlignment())} vs cell " \
+                f"{_horizontal(cell.textAlignment())}"
+    panel.deleteLater()

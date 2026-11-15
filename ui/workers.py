@@ -206,6 +206,7 @@ class DownloadAndCompareWorker(QThread):
                  normalize_sku: bool, case_sensitive: bool, debug: bool,
                  auto_detect: bool, priority_list: Optional[List[str]],
                  exclude_keywords: Optional[List[str]],
+                 export_diff: bool = True,
                  download_workers: int = 4, validate_workers: int = 4,
                  download_root: Optional[Path] = None,
                  download_timeout: int = 120):
@@ -224,6 +225,7 @@ class DownloadAndCompareWorker(QThread):
         self.auto_detect = auto_detect
         self.priority_list = priority_list
         self.exclude_keywords = exclude_keywords
+        self.export_diff = bool(export_diff)
         self.download_workers = download_workers
         self.validate_workers = validate_workers
         self.download_timeout = download_timeout
@@ -295,6 +297,7 @@ class DownloadAndCompareWorker(QThread):
                 merged['site1_label'] = self.site1_label
                 merged['site2_label'] = self.site2_label
                 merged['source'] = self.source.value
+                merged['diff_export_enabled'] = self.export_diff
                 self.results_ready.emit(merged)
                 return
 
@@ -315,6 +318,7 @@ class DownloadAndCompareWorker(QThread):
                 auto_detect_sku=self.auto_detect,
                 priority_list=self.priority_list,
                 exclude_keywords=self.exclude_keywords,
+                export_diff=self.export_diff,
             )
             validator_results = validator.validate_all_parallel(
                 progress_callback=self.progress.emit,
@@ -341,6 +345,7 @@ class DownloadAndCompareWorker(QThread):
             merged['site1_label'] = self.site1_label
             merged['site2_label'] = self.site2_label
             merged['source'] = self.source.value
+            merged['diff_export_enabled'] = self.export_diff
 
             self.results_ready.emit(merged)
 
@@ -462,6 +467,7 @@ class ValidationWorker(QThread):
                 auto_detect_sku=self.config.get('auto_detect', True),
                 priority_list=self.config.get('priority_list'),
                 exclude_keywords=self.config.get('exclude_keywords'),
+                export_diff=self.config.get('export_diff', True),
             )
             results = validator.validate_all_parallel(
                 progress_callback=self.progress.emit,
@@ -484,6 +490,8 @@ class ValidationWorker(QThread):
             results['site1_path'] = self.folder1
             results['site2_path'] = self.folder2
             results['source'] = 'file'
+            results['diff_export_enabled'] = self.config.get('diff_export_enabled',
+                                                           True)
             self.results_ready.emit(results)
         except Exception as e:
             if validator is not None:

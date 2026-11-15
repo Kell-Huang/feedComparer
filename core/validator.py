@@ -39,7 +39,8 @@ class FastBatchValidator:
                  file_pattern=None, max_workers=4,
                  normalize_sku=True, case_sensitive=True, debug=True,
                  auto_detect_sku=True, priority_list=None,
-                 exclude_keywords=None, temp_diff_dir=None):
+                 exclude_keywords=None, temp_diff_dir=None,
+                 export_diff=True):
         self.folder1 = Path(folder1)
         self.folder2 = Path(folder2)
         self.user_sku_column = sku_column
@@ -51,6 +52,9 @@ class FastBatchValidator:
         self.debug = debug
         self.auto_detect_sku = auto_detect_sku
         self.exclude_keywords = exclude_keywords or []
+        # The per-cell diff file is optional: on a feed where most cells differ
+        # it can reach millions of rows, and not everyone needs it.
+        self.export_diff = bool(export_diff)
         # Deferred: only create / adopt a temp dir after folders are validated,
         # otherwise a failed constructor leaks an empty mkdtemp().
         self.temp_diff_dir = temp_diff_dir
@@ -324,9 +328,10 @@ class FastBatchValidator:
                     filename=filename,
                 )
 
-            diff_csv = self._diff_path(filename)
+            diff_csv = self._diff_path(filename) if self.export_diff else None
             column_stats = ColumnMatchStats.calculate(
-                df1_common, df2_common, sku_col1, sku_col2, valid_cols, str(diff_csv),
+                df1_common, df2_common, sku_col1, sku_col2, valid_cols,
+                str(diff_csv) if diff_csv else None,
             )
 
             total_diffs = sum(s['mismatches'] for s in column_stats.values())
@@ -353,7 +358,8 @@ class FastBatchValidator:
                     'avg_match_rate': round(avg_match_rate, 1),
                     'columns_compared': len(valid_cols),
                 },
-                'column_stats': column_stats, 'diff_csv_path': str(diff_csv),
+                'column_stats': column_stats,
+                'diff_csv_path': str(diff_csv) if diff_csv else '',
                 'missing_in_file1': sorted(norm_map2.get(s, s) for s in only_2),
                 'missing_in_file2': sorted(norm_map1.get(s, s) for s in only_1),
             }

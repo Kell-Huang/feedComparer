@@ -393,3 +393,115 @@ def test_validator_temp_dir_is_not_leaked_on_bad_constructor():
         pass
     after = set(glob.glob(str(Path(tempfile.gettempdir()) / 'feed_validator_diffs_*')))
     assert after == before, after - before
+
+
+def test_diff_export_can_be_skipped():
+    """With no path the comparison still runs; only the file is skipped."""
+    import tempfile
+
+    import polars as pl
+
+    from core.stats import ColumnMatchStats
+
+    left = pl.DataFrame({
+        "sku": ["A", "B"], "_sku_norm": ["a", "b"],
+        "title": ["x", "y"], "price": ["1", "2"],
+    })
+    right = pl.DataFrame({
+        "sku": ["A", "B"], "_sku_norm": ["a", "b"],
+        "title": ["x", "z"], "price": ["1", "9"],
+    })
+
+    with tempfile.TemporaryDirectory() as tmp:
+        with_file = Path(tmp) / "diff.csv"
+        written = ColumnMatchStats.calculate(
+            left, right, "sku", "sku", ["title", "price"], str(with_file))
+        skipped = ColumnMatchStats.calculate(
+            left, right, "sku", "sku", ["title", "price"], None)
+
+        assert written == skipped                  # same numbers either way
+        assert written["title"]["mismatches"] == 1
+        assert written["price"]["mismatches"] == 1
+        assert with_file.exists()
+        assert list(Path(tmp).iterdir()) == [with_file]   # nothing else created
+
+
+def test_diff_file_always_has_a_header():
+    """A run with no differences still leaves a readable file."""
+    import tempfile
+
+    import polars as pl
+
+    from core.stats import ColumnMatchStats
+
+    left = pl.DataFrame({"sku": ["A"], "_sku_norm": ["a"], "title": ["x"]})
+    right = left.clone()
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "same.csv"
+        ColumnMatchStats.calculate(left, right, "sku", "sku", ["title"], str(path))
+        assert path.read_text(encoding="utf-8-sig").splitlines() == [
+            "sku,column,value_file1,value_file2"
+        ]
+
+
+def test_validator_can_skip_the_diff_export():
+    from core.validator import FastBatchValidator
+
+    data = Path(__file__).resolve().parent / 'data'
+    if not (data / gen.SITE_A).exists():
+        gen.build(data)
+
+    validator = FastBatchValidator(
+        str(data / gen.SITE_A), str(data / gen.SITE_B), None, [],
+        exclude_keywords=[], export_diff=False,
+    )
+    try:
+        results = validator.validate_all_parallel()
+    finally:
+        validator.cleanup()
+
+    for name, result in results['files'].items():
+        if result['status'] != 'success':
+            continue
+        assert result['diff_csv_path'] == '', name
+        # The numbers are still produced, which is the point of the switch.
+        assert result['column_stats'], name
+    # And the overall aggregation is unaffected.
+    assert results['overall_column_stats']
+
+
+def test_date_gate_accepts_exactly_what_strptime_accepts():
+    """The shape gate must not change which strings count as dates."""
+    from datetime import datetime
+
+    from core.stats import ColumnMatchStats as S
+
+    accepted = [
+        '2024-01-05', '2024/01/05', '2024-1-5',
+        '2024-01-05 10:00:00', '2024-01-05T10:00:00',
+        '2024-01-05T10:00:00.123456',
+    ]
+    for value in accepted:
+        assert S._looks_like_date(value, allow_compact=False), value
+        assert S._to_datetime(value, allow_compact=False) is not None, value
+
+    rejected = ['Blue T-Shirt', 'SKU-2024', '2024', '', '01/05/2024',
+                '999-01-01']      # %Y needs four digits
+    for value in rejected:
+        assert not S._looks_like_date(value, allow_compact=False), value
+        assert S._to_datetime(value, allow_compact=False) is None, value
+
+    # Compact dates only when the other side is already a real date.
+    assert not S._looks_like_date('20240105', allow_compact=False)
+    assert S._to_datetime('20240105', allow_compact=False) is None
+    assert S._to_datetime('20240105', allow_compact=True) == datetime(2024, 1, 5)
+
+
+def test_equivalence_still_holds_after_the_date_gate():
+    from core.stats import ColumnMatchStats as S
+
+    assert S._values_equal('2024-01-05', '2024/01/05')
+    assert S._values_equal('2024-01-05 10:00:00', '2024-01-05T10:00:00')
+    assert not S._values_equal('2024-01-05', '2024-01-06')
+    assert not S._values_equal('Blue T-Shirt', 'Red Hoodie')
+    assert S._values_equal('11.00', '11')
