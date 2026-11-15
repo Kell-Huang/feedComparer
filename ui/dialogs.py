@@ -264,3 +264,20 @@ def show_message(parent, title: str, message: str,
     msg_box.setText(message)
     msg_box.setIcon(icon)
     return msg_box.exec()
+
+
+def show_question(parent, title: str, message: str,
+                  default_no: bool = True) -> bool:
+    """Yes/No confirmation. Returns True only on an explicit Yes.
+
+    Defaulting to No keeps a destructive action (replacing a hand-built
+    pairing) from being confirmed by a stray Enter key.
+    """
+    msg_box = QMessageBox(parent)
+    msg_box.setObjectName("AppMessageBox")
+    msg_box.setWindowTitle(title)
+    msg_box.setText(message)
+    msg_box.setIcon(QMessageBox.Question)
+    msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+    msg_box.setDefaultButton(QMessageBox.No if default_no else QMessageBox.Yes)
+    return msg_box.exec() == QMessageBox.Yes

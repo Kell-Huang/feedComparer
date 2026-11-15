@@ -496,3 +496,129 @@ def test_clear_resets_scope_picker():
     assert panel.rate_scope_combo.count() == 0
     assert panel.rate_caption.text() == ''
     assert panel.diff_caption.text() == ''
+
+
+def _stub_manual_modals(module):
+    """Silence the modal prompts in the manual tab, returning the originals."""
+    originals = (module.show_message, module.show_question)
+    module.show_message = lambda *args, **kwargs: 0
+    module.show_question = lambda *args, **kwargs: True
+    return originals
+
+
+def _restore_manual_modals(module, originals):
+    module.show_message, module.show_question = originals
+
+
+def _manual_tab_with_pairs(left_text, right_text):
+    """Build a manual tab, fill both sides and generate the initial pairing."""
+    import ui.manual_url_tab as manual_mod
+    from ui.main_window import MainWindow
+
+    originals = _stub_manual_modals(manual_mod)
+    window = MainWindow()
+    tab = window.manual_tab
+    tab.url_left_edit.setPlainText(left_text)
+    tab.url_right_edit.setPlainText(right_text)
+    tab._on_generate_pairs()
+    return window, tab, (manual_mod, originals)
+
+
+def test_manual_generate_dedupes_urls_and_pairs_by_position():
+    _app()
+    window, tab, (module, originals) = _manual_tab_with_pairs(
+        'https://x/a.csv\nhttps://x/b.csv\nhttps://x/a.csv',
+        'https://y/x.csv\nhttps://y/y.csv',
+    )
+    try:
+        assert tab._left_nodes == ['https://x/a.csv', 'https://x/b.csv']
+        assert tab._right_nodes == ['https://y/x.csv', 'https://y/y.csv']
+        assert tab._links == [(0, 0), (1, 1)]
+        assert [p.pair_id for p in tab._pairs] == ['pair_0001', 'pair_0002']
+        # Both views render the same model.
+        assert tab.canvas.links() == tab._links
+        assert tab.pair_table.rowCount() == 2
+    finally:
+        window.close()
+        _restore_manual_modals(module, originals)
+
+
+def test_manual_view_toggle_swaps_map_and_table():
+    _app()
+    window, tab, (module, originals) = _manual_tab_with_pairs(
+        'https://x/a.csv', 'https://y/x.csv',
+    )
+    try:
+        # Map is the default editor; the table is hidden but still populated.
+        assert not tab.canvas.isHidden()
+        assert tab.pair_table.isHidden()
+        assert tab.pair_table.rowCount() == 1
+
+        tab.view_table_btn.click()
+        assert tab.pair_table.isVisible() or not tab.pair_table.isHidden()
+        assert tab.canvas.isHidden()
+
+        tab.view_map_btn.click()
+        assert tab.canvas.isHidden() is False
+        assert tab.pair_table.isHidden()
+    finally:
+        window.close()
+        _restore_manual_modals(module, originals)
+
+
+def test_manual_editing_urls_marks_the_map_stale_without_dropping_links():
+    _app()
+    window, tab, (module, originals) = _manual_tab_with_pairs(
+        'https://x/a.csv\nhttps://x/b.csv', 'https://y/x.csv\nhttps://y/y.csv',
+    )
+    try:
+        assert tab.stale_label.isHidden()
+
+        tab.url_left_edit.setPlainText(
+            'https://x/a.csv\nhttps://x/b.csv\nhttps://x/c.csv'
+        )
+        assert not tab.stale_label.isHidden()
+        # The hand-built pairing survives until the user regenerates.
+        assert len(tab._pairs) == 2
+
+        tab._on_generate_pairs()
+        assert tab.stale_label.isHidden()
+        assert len(tab._pairs) == 2      # min(3 left, 2 right)
+    finally:
+        window.close()
+        _restore_manual_modals(module, originals)
+
+
+def test_manual_remove_row_updates_both_views():
+    _app()
+    window, tab, (module, originals) = _manual_tab_with_pairs(
+        'https://x/a.csv\nhttps://x/b.csv', 'https://y/x.csv\nhttps://y/y.csv',
+    )
+    try:
+        tab._remove_pair(0)
+        assert tab._links == [(1, 1)]
+        assert tab.canvas.links() == [(1, 1)]
+        assert tab.pair_table.rowCount() == 1
+        assert tab._pairs[0].pair_id == 'pair_0001'
+    finally:
+        window.close()
+        _restore_manual_modals(module, originals)
+
+
+def test_manual_canvas_edit_rebuilds_the_pair_list():
+    """A drag in the map has to reach the table and the run payload."""
+    _app()
+    window, tab, (module, originals) = _manual_tab_with_pairs(
+        'https://x/a.csv\nhttps://x/b.csv', 'https://y/x.csv\nhttps://y/y.csv',
+    )
+    try:
+        tab.canvas.links_changed.emit([(0, 1)])
+        assert tab._links == [(0, 1)]
+        assert len(tab._pairs) == 1
+        assert tab._pairs[0].left_name == 'a.csv'
+        assert tab._pairs[0].right_name == 'y.csv'
+        assert tab.pair_table.rowCount() == 1
+        assert tab.build_run_payload()['pairs'][0].right_url == 'https://y/y.csv'
+    finally:
+        window.close()
+        _restore_manual_modals(module, originals)

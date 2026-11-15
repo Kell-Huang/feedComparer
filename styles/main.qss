@@ -226,6 +226,47 @@ QPushButton#removePairBtn:disabled {
     border-color: #eceff3;
 }
 
+/* Map / Table switch in the pairing card. Secondary by design: the map is the
+   default editor, but the switch must not compete with the primary Run button. */
+QPushButton#pairViewBtn {
+    background-color: #ffffff;
+    color: #475467;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: normal;
+    min-height: 16px;
+}
+
+QPushButton#pairViewBtn:hover {
+    background-color: #f7f8fa;
+}
+
+QPushButton#pairViewBtn:checked {
+    background-color: #eef4ff;
+    border-color: #2f6fed;
+    color: #1d4ed8;
+    font-weight: bold;
+}
+
+QPushButton#pairViewBtn:disabled {
+    background-color: #f2f4f7;
+    color: #98a2b3;
+    border-color: #e4e7ec;
+}
+
+/* The pairing canvas paints itself; the card provides the surface. */
+#PairingCanvas {
+    background-color: transparent;
+}
+
+/* Shown when the pasted URLs no longer match the map built from them. */
+QLabel#staleLabel {
+    color: #b54708;
+    font-size: 12px;
+}
+
 /* ----------------------------------------------------------------------------
    Inputs
    ---------------------------------------------------------------------------- */

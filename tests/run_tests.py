@@ -25,6 +25,7 @@ SUITES = {
     'progress': 'test_progress',
     'downloader': 'test_downloader',
     'ui': 'test_ui',
+    'canvas': 'test_pairing_canvas',
     'flow': 'test_flow',
     'scale': 'test_scale',
 }
