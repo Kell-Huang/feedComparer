@@ -103,6 +103,7 @@ class PairingCanvas(QWidget):
         self._links: List[Tuple[int, int]] = []
 
         self._hover: Optional[Tuple[str, int]] = None
+        self._hover_link: Optional[Tuple[int, int]] = None
         self._drag: Optional[Tuple[str, int]] = None
         self._drag_pos = QPointF()
         self._drag_moved = False
@@ -313,9 +314,13 @@ class PairingCanvas(QWidget):
                 self._stroke_partial(painter, path, progress,
                                      self._link_color(link), 1.5)
                 continue
-            painter.setPen(QPen(QColor(self._link_color(link)), 1.5))
+            hovered = link == self._hover_link
+            colour = DANGER if hovered else self._link_color(link)
+            painter.setPen(QPen(QColor(colour), 2.2 if hovered else 1.5))
             painter.setBrush(Qt.NoBrush)
             painter.drawPath(path)
+            if hovered:
+                self._paint_remove_badge(painter, path.pointAtPercent(0.5))
 
         # Fading links are no longer in self._links, so they need their own
         # geometry: the endpoints still exist as chips.
@@ -328,6 +333,18 @@ class PairingCanvas(QWidget):
             painter.setPen(QPen(colour, 1.5))
             painter.setBrush(Qt.NoBrush)
             painter.drawPath(self._link_path(*pending.link))
+
+    def _paint_remove_badge(self, painter: QPainter, centre: QPointF) -> None:
+        """A small × on the hovered link: the hint that clicking removes it."""
+        radius = 8.0
+        painter.setPen(QPen(QColor(DANGER), 1.4))
+        painter.setBrush(QColor('#ffffff'))
+        painter.drawEllipse(centre, radius, radius)
+        painter.setPen(QPen(QColor(DANGER), 1.8))
+        painter.drawLine(QPointF(centre.x() - 3, centre.y() - 3),
+                         QPointF(centre.x() + 3, centre.y() + 3))
+        painter.drawLine(QPointF(centre.x() + 3, centre.y() - 3),
+                         QPointF(centre.x() - 3, centre.y() + 3))
 
     def _paint_pulses(self, painter: QPainter) -> None:
         for pulse in self._pulses:
@@ -532,6 +549,15 @@ class PairingCanvas(QWidget):
     # Interaction
     # ------------------------------------------------------------------
 
+    def leaveEvent(self, event) -> None:
+        if self._hover is not None or self._hover_link is not None:
+            self._hover = None
+            self._hover_link = None
+            self._invalidate_chips()
+            self.setCursor(Qt.ArrowCursor)
+            self.update()
+        super().leaveEvent(event)
+
     def mousePressEvent(self, event) -> None:
         if self._locked or event.button() != Qt.LeftButton:
             return
@@ -541,6 +567,7 @@ class PairingCanvas(QWidget):
             self._drag = port
             self._drag_pos = pos
             self._drag_moved = False
+            self._hover_link = None
             self.setCursor(Qt.ClosedHandCursor)
             self.update()
             return
@@ -560,11 +587,20 @@ class PairingCanvas(QWidget):
         pos = QPointF(event.position())
         if self._drag is None:
             hover = self._port_at(pos)
+            hover_link = None if hover else self._link_at(pos)
             if hover != self._hover:
                 self._hover = hover
-                self.setCursor(Qt.OpenHandCursor if hover else Qt.ArrowCursor)
                 self._invalidate_chips()
-                self.update()
+            if hover_link != self._hover_link:
+                self._hover_link = hover_link
+            # Ports say "grab me", links say "click me to remove".
+            if hover:
+                self.setCursor(Qt.OpenHandCursor)
+            elif hover_link is not None:
+                self.setCursor(Qt.PointingHandCursor)
+            else:
+                self.setCursor(Qt.ArrowCursor)
+            self.update()
             return
 
         if not self._drag_moved and (pos - self._drag_pos).manhattanLength() >= DRAG_THRESHOLD:
@@ -638,7 +674,13 @@ class PairingCanvas(QWidget):
         if area is None:
             return
         viewport = area.viewport()
-        local = viewport.mapFrom(self, pos.toPoint())
+        if not viewport.isAncestorOf(self):
+            # QWidget.mapFrom() warns ("parent must be in parent hierarchy")
+            # when the two widgets are unrelated; that can happen while the tab
+            # is being rebuilt. Going through global coordinates is safe either
+            # way and costs nothing.
+            return
+        local = viewport.mapFromGlobal(self.mapToGlobal(pos.toPoint()))
         margin = 28
         bar = area.verticalScrollBar()
         if local.y() < margin:

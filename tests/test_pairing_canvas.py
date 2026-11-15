@@ -10,7 +10,7 @@ import os
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QEvent, QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -218,4 +218,33 @@ def test_status_colours_the_link_without_touching_the_model():
     assert canvas._link_color((0, 0)) == '#b42318'
     canvas.clear_pair_status()
     assert canvas.links() == [(0, 0)]
+    canvas.close()
+
+
+def test_hovering_a_link_marks_it_and_offers_a_remove_hint():
+    """Hovering a connector turns it red and shows the × that clicking applies."""
+    canvas = _canvas(links=[(0, 0)])
+    start = canvas._anchor_point('left', 0)
+    end = canvas._anchor_point('right', 0)
+    midpoint = QPoint(int((start.x() + end.x()) / 2), int((start.y() + end.y()) / 2))
+
+    QTest.mouseMove(canvas, midpoint)
+    _app().processEvents()
+
+    assert canvas._hover_link == (0, 0)
+    assert canvas.cursor().shape() == Qt.PointingHandCursor
+
+    # Leaving the widget clears the highlight.
+    canvas.leaveEvent(QEvent(QEvent.Leave))
+    assert canvas._hover_link is None
+    assert canvas.cursor().shape() == Qt.ArrowCursor
+    canvas.close()
+
+
+def test_hovering_empty_space_keeps_the_default_cursor():
+    canvas = _canvas(links=[(0, 0)])
+    QTest.mouseMove(canvas, QPoint(300, 180))
+    _app().processEvents()
+    assert canvas._hover_link is None
+    assert canvas.cursor().shape() == Qt.ArrowCursor
     canvas.close()
