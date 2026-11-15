@@ -73,7 +73,8 @@ def test_main_window_builds():
 
     window = MainWindow()
     try:
-        assert window.mode_tabs.count() == 3
+        assert window.mode_tabs.count() == 4
+        assert window.mode_tabs.tabText(window.settings_tab_index) == "Settings"
         assert window.minimumWidth() >= 1000
         assert window.results_panel.tabs.count() == 6
     finally:
@@ -215,15 +216,48 @@ def test_cancel_restores_ui_state():
         window.close()
 
 
-def test_file_filter_only_visible_in_file_mode():
+def test_config_lives_on_the_settings_tab():
+    """One shared config block, on its own tab, out of every mode form."""
+    _app()
+    from PySide6.QtWidgets import QGroupBox
+
+    from ui.main_window import MainWindow
+
+    window = MainWindow()
+    try:
+        # No mode tab carries its own copy any more.
+        for tab in (window.file_tab, window.api_tab, window.manual_tab):
+            assert tab.findChild(QGroupBox, "configGroup") is None, tab.objectName()
+        # The file filter is part of the shared config now, so it is always
+        # shown rather than toggling as the user switches modes.
+        assert not window.settings_widget.filter_combo.isHidden()
+        assert window._settings_page.findChild(QGroupBox, "configGroup") is not None
+    finally:
+        window.close()
+
+
+def test_settings_tab_cannot_start_a_run():
+    """Run is disabled on Settings and the summary says what the config does."""
     _app()
     from ui.main_window import MainWindow
 
     window = MainWindow()
     try:
-        assert not window.file_tab.config_widget.filter_combo.isHidden()
-        assert window.api_tab.config_widget.filter_combo.isHidden()
-        assert window.manual_tab.config_widget.filter_combo.isHidden()
+        assert window.run_btn.isEnabled()
+        window.mode_tabs.setCurrentIndex(window.settings_tab_index)
+        assert not window.run_btn.isEnabled()
+        assert not window.edit_config_btn.isEnabled()
+        assert "SKU:" in window.config_summary.text()
+
+        # Back on a mode tab it is usable again, and Edit is redundant there.
+        window.mode_tabs.setCurrentIndex(0)
+        assert window.run_btn.isEnabled()
+        assert window.edit_config_btn.isEnabled()
+
+        # The summary tracks the live widget, not a stale snapshot.
+        window.settings_widget.exclude_edit.setText("promo")
+        window.mode_tabs.setCurrentIndex(1)
+        assert "promo" in window.config_summary.text()
     finally:
         window.close()
 
@@ -249,11 +283,12 @@ def test_action_bar_always_visible_and_wired():
             assert not window.run_btn.parent().findChild(QScrollArea)
 
             # Invalid form -> no payload, no crash.
-            assert window.file_tab.build_run_payload() is None
+            config = window.settings_widget.get_config()
+            assert window.file_tab.build_run_payload(config) is None
 
             window.file_tab.f1_edit.setText("tests/data/site_a")
             window.file_tab.f2_edit.setText("tests/data/site_b")
-            payload = window.file_tab.build_run_payload()
+            payload = window.file_tab.build_run_payload(config)
             assert payload["mode"] == "file"
             assert payload["config"]["exclude_keywords"] == ["stock", "price"]
 
@@ -653,7 +688,12 @@ def test_manual_canvas_edit_rebuilds_the_pair_list():
         assert tab._pairs[0].left_name == "a.csv"
         assert tab._pairs[0].right_name == "y.csv"
         assert tab.pair_table.rowCount() == 1
-        assert tab.build_run_payload()["pairs"][0].right_url == "https://y/y.csv"
+        assert (
+            tab.build_run_payload(window.settings_widget.get_config())["pairs"][
+                0
+            ].right_url
+            == "https://y/y.csv"
+        )
     finally:
         window.close()
         _restore_manual_modals(module, originals)

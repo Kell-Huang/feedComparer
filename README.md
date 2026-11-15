@@ -45,12 +45,15 @@ API credentials live in `platform_config.json`:
 
 ## How a run works
 
-1. **Download** (API / Manual modes) — pairs are fetched concurrently, de-duplicated
+1. **Configure** — SKU column, compare columns, exclusions and flags live on the
+   **Settings** tab. One configuration is shared by all three modes; the action
+   bar shows a one-line recap so you can see it without leaving the form.
+2. **Download** (API / Manual modes) — pairs are fetched concurrently, de-duplicated
    by URL, and the real format is detected from the payload rather than the URL
    suffix. Fills 0–60% of the progress bar.
-2. **Validate** — each pair is read, aligned on a normalized SKU key, and every
+3. **Validate** — each pair is read, aligned on a normalized SKU key, and every
    common column is diffed. Fills 60–100%.
-3. **Report** — results render into six tabs and a ZIP report is written to
+4. **Report** — results render into six tabs and a ZIP report is written to
    `reports/` next to the application.
 
 Every run can be cancelled from the toolbar; in-flight requests abort at the
@@ -71,12 +74,12 @@ core/                   business logic, no Qt imports
   sku_detector.py       SKU column auto-detection
   logger.py             bounded, thread-safe debug log
 ui/                     PySide6 widgets
-  main_window.py        window, action bar, export
+  main_window.py        window, mode/settings tabs, action bar, export
   results_panel.py      six result tabs
   file_mode_tab.py      file mode form
   api_mode_tab.py       API mode form
   manual_url_tab.py     manual URL form
-  config_widget.py      shared column configuration
+  config_widget.py      shared column configuration (Settings tab)
   pairing_canvas.py     drag-to-pair map for manual mode
   pair_status.py        live per-pair status column
   delegates.py          status pill delegate
@@ -118,5 +121,5 @@ exactly, not just "something was found".
   a real difference.
 - Feed comparison is case-sensitive for values; the "Case Sensitive" toggle
   applies to SKU matching.
-- Excluded column keywords default to `stock, price` and are editable per run
-  in the configuration panel.
+- Excluded column keywords default to `stock, price` and are editable on the
+  Settings tab. Settings apply to the next run, not to one in flight.

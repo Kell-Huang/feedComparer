@@ -35,7 +35,6 @@ from PySide6.QtWidgets import (
 
 from core.models import DownloadPair
 
-from .config_widget import ComparisonConfigWidget
 from .dialogs import show_message
 from .layout_utils import scrollable_container
 from .pair_status import PairTableStatus
@@ -79,7 +78,6 @@ class ApiModeTab(QWidget):
         base_url: str,
         headers: dict,
         verify_ssl: bool,
-        exclude_keywords=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -87,7 +85,6 @@ class ApiModeTab(QWidget):
         self._base_url = base_url
         self._headers = headers
         self._verify_ssl = verify_ssl
-        self._exclude_keywords = exclude_keywords
 
         self._projects: List[dict] = []
         self._sites1_all: List[dict] = []
@@ -235,13 +232,6 @@ class ApiModeTab(QWidget):
         pair_layout.addWidget(self.pair_table)
         self.pair_status = PairTableStatus(self.pair_table, 4)
         layout.addWidget(pair_group)
-
-        # Shared config
-        self.config_widget = ComparisonConfigWidget(
-            exclude_keywords=self._exclude_keywords
-        )
-        self.config_widget.show_file_filter(False)
-        layout.addWidget(self.config_widget)
 
         layout.addStretch()
 
@@ -646,7 +636,7 @@ class ApiModeTab(QWidget):
     # Run
     # ------------------------------------------------------------------
 
-    def build_run_payload(self):
+    def build_run_payload(self, config):
         """Validate the form and return the run request, or None if invalid."""
         if self._is_running or self._pending_channel_fetches > 0:
             return None
@@ -665,12 +655,11 @@ class ApiModeTab(QWidget):
             "pairs": list(self._pairs),
             "site1_label": site1_label,
             "site2_label": site2_label,
-            "config": self.config_widget.get_config(),
+            "config": config,
         }
 
     def set_running(self, running: bool) -> None:
         self._is_running = running
-        self.config_widget.set_running(running)
         if running:
             self.pair_status.begin(len(self._pairs))
         else:

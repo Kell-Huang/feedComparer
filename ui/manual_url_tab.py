@@ -46,7 +46,6 @@ from core.progress import (
     PAIR_PENDING,
 )
 
-from .config_widget import ComparisonConfigWidget
 from .dialogs import show_message, show_question
 from .layout_utils import scrollable_container
 from .pair_status import PairTableStatus
@@ -101,7 +100,7 @@ class ManualUrlTab(QWidget):
          'config': dict}
     """
 
-    def __init__(self, exclude_keywords=None, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("ManualUrlTab")
         self._pairs: List[DownloadPair] = []
@@ -109,13 +108,13 @@ class ManualUrlTab(QWidget):
         self._right_nodes: List[str] = []
         self._links: List[Tuple[int, int]] = []
         self._is_running = False
-        self._build_ui(exclude_keywords)
+        self._build_ui()
 
     # ------------------------------------------------------------------
     # Construction
     # ------------------------------------------------------------------
 
-    def _build_ui(self, exclude_keywords) -> None:
+    def _build_ui(self) -> None:
         layout, _scroll = scrollable_container(self)
 
         url_group = QGroupBox("Paste URLs (one per line)")
@@ -235,10 +234,6 @@ class ManualUrlTab(QWidget):
         pair_layout.addWidget(self.pair_table)
         self.pair_status = PairTableStatus(self.pair_table, 4)
         layout.addWidget(pair_group)
-
-        self.config_widget = ComparisonConfigWidget(exclude_keywords=exclude_keywords)
-        self.config_widget.show_file_filter(False)
-        layout.addWidget(self.config_widget)
 
         layout.addStretch()
 
@@ -435,7 +430,7 @@ class ManualUrlTab(QWidget):
     # Run
     # ------------------------------------------------------------------
 
-    def build_run_payload(self):
+    def build_run_payload(self, config):
         """Validate the form and return the run request, or None if invalid."""
         if self._is_running:
             return None
@@ -452,7 +447,7 @@ class ManualUrlTab(QWidget):
             "pairs": list(self._pairs),
             "site1_label": "Manual Site 1",
             "site2_label": "Manual Site 2",
-            "config": self.config_widget.get_config(),
+            "config": config,
         }
 
     def set_running(self, running: bool) -> None:
@@ -462,7 +457,6 @@ class ManualUrlTab(QWidget):
         self.url_right_edit.setEnabled(not running)
         self.generate_btn.setEnabled(not running)
         self.clear_pairs_btn.setEnabled(not running)
-        self.config_widget.set_running(running)
         self.canvas.set_locked(running)
         if running:
             self.canvas.clear_pair_status()

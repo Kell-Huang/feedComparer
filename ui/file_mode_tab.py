@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .config_widget import ComparisonConfigWidget
 from .dialogs import show_message
 from .layout_utils import scrollable_container
 
@@ -28,12 +27,12 @@ class FileModeTab(QWidget):
     bar, not here, so they stay visible while this form scrolls.
     """
 
-    def __init__(self, exclude_keywords=None, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("FileModeTab")
-        self._build_ui(exclude_keywords)
+        self._build_ui()
 
-    def _build_ui(self, exclude_keywords) -> None:
+    def _build_ui(self) -> None:
         layout, _scroll = scrollable_container(self)
 
         # Folder selection
@@ -66,11 +65,6 @@ class FileModeTab(QWidget):
         folder_grid.setColumnStretch(1, 1)
         layout.addWidget(folder_group)
 
-        # Shared config
-        self.config_widget = ComparisonConfigWidget(exclude_keywords=exclude_keywords)
-        self.config_widget.show_file_filter(True)
-        layout.addWidget(self.config_widget)
-
         layout.addStretch()
 
     def _browse(self, edit: QLineEdit) -> None:
@@ -78,7 +72,7 @@ class FileModeTab(QWidget):
         if folder:
             edit.setText(folder)
 
-    def build_run_payload(self):
+    def build_run_payload(self, config):
         """Validate the form and return the run request, or None if invalid."""
         f1 = self.f1_edit.text().strip()
         f2 = self.f2_edit.text().strip()
@@ -94,7 +88,7 @@ class FileModeTab(QWidget):
             "mode": "file",
             "folder1": f1,
             "folder2": f2,
-            "config": self.config_widget.get_config(),
+            "config": config,
         }
 
     def set_running(self, running: bool) -> None:
@@ -102,4 +96,3 @@ class FileModeTab(QWidget):
         self.f2_edit.setEnabled(not running)
         self.f1_browse.setEnabled(not running)
         self.f2_browse.setEnabled(not running)
-        self.config_widget.set_running(running)

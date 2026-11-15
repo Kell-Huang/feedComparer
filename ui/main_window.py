@@ -1,8 +1,17 @@
 """Main application window.
 
-Owns the three mode tabs, the results panel, and the current worker. All
-worker construction, signal wiring, export, and cleanup lives here so the mode
-tabs stay purely about their own UI.
+Owns the mode tabs (File / API / Manual URL), the Settings tab, the results
+panel, and the current worker. All worker construction, signal wiring, export,
+and cleanup lives here so the mode tabs stay purely about their own UI.
+
+Tab contract:
+
+  - The three mode tabs build a run payload; the Settings tab never does.
+    ``_on_run_clicked`` therefore disables the Run button while Settings is
+    active instead of silently doing nothing.
+  - The comparison configuration is a single widget owned by this window and
+    handed to whichever mode tab builds the payload, so every mode compares
+    with the same settings.
 
 Shutdown contract:
 
@@ -50,9 +59,11 @@ from core.models import PairSource
 from core.progress import truncate
 
 from .api_mode_tab import ApiModeTab
+from .config_widget import ComparisonConfigWidget
 from .dialogs import CompletionDialog, show_message
 from .file_mode_tab import FileModeTab
 from .icons import make_icon
+from .layout_utils import scrollable_container
 from .manual_url_tab import ManualUrlTab
 from .results_panel import ResultsPanel
 from .theme import app_icon
@@ -72,6 +83,11 @@ EXCLUDE_COLUMNS_KEYWORDS = ["stock", "price"]
 
 # Total cooperative shutdown budget: 10s + 10s = 20s before prompting the user.
 SHUTDOWN_WAIT_MS = 10000
+
+# Height of the tallest mode form (API Mode: project + two site groups +
+# channel lists + pairing table) plus the action bar. Measured, not guessed:
+# it is the point at which every mode fits without scrolling at 100% scale.
+FORM_HEIGHT = 540
 
 _EXPORT_COPY_CHUNK = 1 << 20
 
@@ -111,11 +127,16 @@ class MainWindow(QMainWindow):
         self._config = _load_config()
         self.setWindowIcon(app_icon())
         self._current_worker = None
+        self._running = False
+        self._split_applied = False
         self._current_results: Optional[dict] = None
         self._log_lines: List[str] = []
         self._closing = False
         self._build_ui()
         self._wire_signals()
+        # Prime the summary label and the run button for whichever tab is
+        # active on first paint.
+        self._on_mode_changed(self.mode_tabs.currentIndex())
         self._warn_if_insecure()
 
     # ------------------------------------------------------------------
@@ -147,17 +168,34 @@ class MainWindow(QMainWindow):
         # scroll area usable instead of collapsing it to a sliver.
         self.mode_tabs.setMinimumHeight(330)
 
-        self.file_tab = FileModeTab(exclude_keywords=EXCLUDE_COLUMNS_KEYWORDS)
+        self.file_tab = FileModeTab()
         self.api_tab = ApiModeTab(
             base_url=self._config["base_url"],
             headers={"X-Auth-Token": self._config["auth_token"]},
             verify_ssl=self._config.get("verify_ssl", True),
-            exclude_keywords=EXCLUDE_COLUMNS_KEYWORDS,
         )
-        self.manual_tab = ManualUrlTab(exclude_keywords=EXCLUDE_COLUMNS_KEYWORDS)
+        self.manual_tab = ManualUrlTab()
         self.mode_tabs.addTab(self.file_tab, "File Mode")
         self.mode_tabs.addTab(self.api_tab, "API Mode")
         self.mode_tabs.addTab(self.manual_tab, "Manual URL")
+
+        # One configuration, shared by every mode, on its own tab. Each mode
+        # used to own a copy, so a SKU column entered in File Mode was
+        # invisible in API Mode, and the block cost 337px of every form —
+        # 65% of it. Keeping it off the forms lets each form show only the
+        # controls that belong to that mode.
+        self.settings_widget = ComparisonConfigWidget(
+            exclude_keywords=EXCLUDE_COLUMNS_KEYWORDS
+        )
+        # The file filter lives here too, so it is always visible rather than
+        # appearing and disappearing as the user switches mode tabs.
+        self.settings_widget.show_file_filter(True)
+        self._settings_page = QWidget()
+        self._settings_page.setObjectName("SettingsPage")
+        settings_layout, _settings_scroll = scrollable_container(self._settings_page)
+        settings_layout.addWidget(self.settings_widget)
+        settings_layout.addStretch()
+        self.settings_tab_index = self.mode_tabs.addTab(self._settings_page, "Settings")
 
         # Action bar lives outside the scrolling tab content so the primary
         # button is always reachable. Inside the tab it ended up below the
@@ -175,12 +213,9 @@ class MainWindow(QMainWindow):
         self.results_panel.setMinimumHeight(64)
         splitter.addWidget(self.results_panel)
 
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 1)
-        # Start with the results panel small. Before a run it is entirely
-        # empty, and giving it 40% of the window clipped the mode tabs' own
-        # controls on a 720p display.
-        splitter.setSizes([660, 64])
+        # No stretch factors on purpose: they override the split applied on
+        # first show. Without them Qt scales both panes proportionally from
+        # whatever that split set.
         outer.addWidget(splitter, stretch=1)
 
         bottom = QWidget()
@@ -198,8 +233,31 @@ class MainWindow(QMainWindow):
         bottom_layout.addWidget(self.status_label)
         outer.addWidget(bottom)
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # setSizes() is a no-op while the splitter still has a 0px geometry,
+        # so the initial split has to wait until the first show.
+        if not self._split_applied:
+            self._split_applied = True
+            self._apply_initial_split()
+
+    def _apply_initial_split(self) -> None:
+        """Give the forms FORM_HEIGHT; whatever is left goes to the results.
+
+        The column configuration used to sit on every form and made them so
+        tall that the results panel had to start at 64px. With it on its own
+        tab the forms are short, so the reclaimed height goes where it is
+        useful instead of leaving dead space under a 110px File Mode form.
+        """
+        total = self.splitter.height()
+        if total <= 0:
+            return
+        top = min(max(FORM_HEIGHT, int(total * 0.55)), total - 150)
+        top = max(top, self.mode_tabs.minimumHeight() + 46)
+        self.splitter.setSizes([top, max(total - top, 150)])
+
     def _build_action_bar(self) -> QWidget:
-        """Persistent Run / Export / Clear bar shared by all three modes."""
+        """Persistent Run / Export / Clear bar shared by every mode."""
         bar = QWidget()
         bar.setObjectName("ActionBar")
         layout = QHBoxLayout(bar)
@@ -236,6 +294,20 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.cancel_btn)
 
         layout.addStretch()
+
+        # The settings moved off the forms, so the one thing that must stay
+        # visible is what they currently say.
+        self.config_summary = QLabel()
+        self.config_summary.setObjectName("ConfigSummary")
+        layout.addWidget(self.config_summary)
+
+        self.edit_config_btn = QPushButton("Edit")
+        self.edit_config_btn.setObjectName("editConfigBtn")
+        self.edit_config_btn.setToolTip("Open the Settings tab")
+        self.edit_config_btn.clicked.connect(
+            lambda: self.mode_tabs.setCurrentIndex(self.settings_tab_index)
+        )
+        layout.addWidget(self.edit_config_btn)
         return bar
 
     def _on_cancel_clicked(self) -> None:
@@ -248,16 +320,50 @@ class MainWindow(QMainWindow):
         )
 
     def _current_tab(self):
-        return self.mode_tabs.currentWidget()
+        """The active mode form, or None when the Settings tab is showing."""
+        widget = self.mode_tabs.currentWidget()
+        return None if widget is self._settings_page else widget
 
     def _on_run_clicked(self) -> None:
         tab = self._current_tab()
         build = getattr(tab, "build_run_payload", None)
         if build is None:
+            show_message(
+                self,
+                "Nothing to run",
+                "Pick a mode tab (File Mode, API Mode or Manual URL) to start "
+                "a run. Settings only describes how the comparison behaves.",
+                QMessageBox.Information,
+            )
             return
-        payload = build()
+        payload = build(self.settings_widget.get_config())
         if payload:
             self._on_run_requested(payload)
+
+    def _on_mode_changed(self, index: int) -> None:
+        """Keep the run button honest about what the active tab can do."""
+        on_settings = index == self.settings_tab_index
+        self.run_btn.setEnabled(not on_settings and not self._running)
+        self.edit_config_btn.setEnabled(not on_settings)
+        if on_settings:
+            self.run_btn.setToolTip(
+                "Settings describe how the comparison behaves; switch to a "
+                "mode tab to start a run"
+            )
+        else:
+            self._update_run_button_label(index)
+        self._refresh_config_summary()
+
+    def _refresh_config_summary(self) -> None:
+        """One line saying what the settings currently do."""
+        config = self.settings_widget.get_config()
+        sku = config.get("sku_column") or "auto-detected"
+        columns = config.get("compare_columns") or []
+        column_text = f"{len(columns)} columns" if columns else "all columns"
+        excluded = ", ".join(config.get("exclude_keywords") or []) or "none"
+        self.config_summary.setText(
+            f"SKU: {sku}   ·   {column_text}   ·   excluded: {excluded}"
+        )
 
     def _update_run_button_label(self, index: int) -> None:
         if index == 0:
@@ -271,7 +377,7 @@ class MainWindow(QMainWindow):
 
     def _wire_signals(self) -> None:
         self.api_tab.log.connect(self._on_api_log)
-        self.mode_tabs.currentChanged.connect(self._update_run_button_label)
+        self.mode_tabs.currentChanged.connect(self._on_mode_changed)
 
     def _warn_if_insecure(self) -> None:
         """One-time startup warning when TLS verification is disabled."""
@@ -512,9 +618,15 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _set_all_running(self, running: bool) -> None:
+        self._running = running
         for tab in (self.file_tab, self.api_tab, self.manual_tab):
             tab.set_running(running)
-        self.run_btn.setEnabled(not running)
+        self.settings_widget.set_running(running)
+        self.edit_config_btn.setEnabled(not running)
+        # The Settings tab cannot start a run, so the button stays disabled
+        # there even when nothing is in flight.
+        on_settings = self.mode_tabs.currentIndex() == self.settings_tab_index
+        self.run_btn.setEnabled(not running and not on_settings)
         self.clear_btn.setEnabled(not running)
         self.cancel_btn.setVisible(running)
         self.cancel_btn.setEnabled(running)

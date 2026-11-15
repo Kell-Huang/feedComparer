@@ -73,7 +73,7 @@ def test_file_mode_run_end_to_end():
     try:
         window.file_tab.f1_edit.setText(str(DATA / gen.SITE_A))
         window.file_tab.f2_edit.setText(str(DATA / gen.SITE_B))
-        payload = window.file_tab.build_run_payload()
+        payload = window.file_tab.build_run_payload(window.settings_widget.get_config())
         assert payload is not None
 
         _wait_for_run(window, payload)
@@ -91,7 +91,7 @@ def test_file_mode_run_end_to_end():
         # core tests see with no exclusions:
         #   feed_main 1 (title), feed_broken 1, feed_numeric 1,
         #   feed_pipe 1, feed_semicolon 1
-        assert window.file_tab.config_widget.exclude_edit.text() == "stock, price"
+        assert window.settings_widget.exclude_edit.text() == "stock, price"
         assert overall["total_diffs"] == 5, overall
 
         # Run state restored.
@@ -151,7 +151,7 @@ def test_run_with_missing_folder_reports_error():
             "mode": "file",
             "folder1": str(DATA / "does_not_exist"),
             "folder2": str(DATA / gen.SITE_B),
-            "config": window.file_tab.config_widget.get_config(),
+            "config": window.settings_widget.get_config(),
         }
         _wait_for_run(window, payload)
 

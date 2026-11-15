@@ -128,6 +128,7 @@ QPushButton#deselectAllBtn,
 QPushButton#exportBtn,
 QPushButton#clearBtn,
 QPushButton#cancelBtn {
+QPushButton#editConfigBtn {
     background-color: #ffffff;
     color: #344054;
     border: 1px solid #d0d5dd;
@@ -150,6 +151,7 @@ QPushButton#deselectAllBtn:hover,
 QPushButton#exportBtn:hover,
 QPushButton#clearBtn:hover,
 QPushButton#cancelBtn:hover {
+QPushButton#editConfigBtn:hover {
     background-color: #f7f8fa;
     border-color: #b8c0cc;
 }
@@ -170,6 +172,7 @@ QPushButton#deselectAllBtn:disabled,
 QPushButton#exportBtn:disabled,
 QPushButton#clearBtn:disabled,
 QPushButton#cancelBtn:disabled {
+QPushButton#editConfigBtn:disabled {
     background-color: #f9fafb;
     border-color: #eceff3;
     color: #98a2b3;
@@ -604,6 +607,13 @@ QLabel#scopeLabel {
 
 QLabel#scopeCaption {
     color: #98a2b3;
+    font-size: 12px;
+}
+
+/* One-line recap of the Settings tab, sitting next to the Edit shortcut.
+   Muted so it never competes with the primary action on the same row. */
+QLabel#ConfigSummary {
+    color: #667085;
     font-size: 12px;
 }
 
