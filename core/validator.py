@@ -184,14 +184,29 @@ class FastBatchValidator:
         return series
 
     @staticmethod
-    def _sku_maps(df: pl.DataFrame, raw_col: str) -> dict:
-        """Map normalized SKU -> first raw representation, skipping blanks."""
+    def _norm_set(df: pl.DataFrame) -> set:
+        """The distinct normalized SKUs, blanks excluded.
+
+        This used to build a normalized -> raw dict for every row just to take
+        its keys; on a 150k-row feed that dict held two strings per SKU. Only
+        the set is needed here, and the raw names are looked up later for the
+        handful of SKUs that are actually missing.
+        """
+        return set(df["_sku_norm"].filter(df["_sku_norm"] != "").unique().to_list())
+
+    @staticmethod
+    def _raw_names(df: pl.DataFrame, raw_col: str, keys) -> list:
+        """Original SKU spellings for ``keys``, sorted, with a fallback."""
+        if not keys:
+            return []
+        wanted = list(keys)
         pairs = (
             df.select([raw_col, "_sku_norm"])
-            .filter(pl.col("_sku_norm") != "")
+            .filter(pl.col("_sku_norm").is_in(wanted))
             .unique(subset=["_sku_norm"], keep="first")
         )
-        return dict(zip(pairs["_sku_norm"].to_list(), pairs[raw_col].to_list()))
+        mapping = dict(zip(pairs["_sku_norm"].to_list(), pairs[raw_col].to_list()))
+        return sorted(mapping.get(key, key) for key in wanted)
 
     def _align_dataframes(self, df1, df2, filename):
         """Row-align two DataFrames on the shared normalized SKU set.
@@ -380,10 +395,8 @@ class FastBatchValidator:
                 self._normalized_column(df2, sku_col2).alias("_sku_norm")
             )
 
-            norm_map1 = self._sku_maps(df1, sku_col1)
-            norm_map2 = self._sku_maps(df2, sku_col2)
-            norm_set1 = set(norm_map1)
-            norm_set2 = set(norm_map2)
+            norm_set1 = self._norm_set(df1)
+            norm_set2 = self._norm_set(df2)
 
             common_norm = norm_set1 & norm_set2
             only_1 = norm_set1 - norm_set2
@@ -427,6 +440,11 @@ class FastBatchValidator:
                 else 0
             )
 
+            # Look the raw spellings up now, while the frames still exist,
+            # and only for the SKUs that are actually missing.
+            missing_in_file1 = self._raw_names(df2, sku_col2, only_2)
+            missing_in_file2 = self._raw_names(df1, sku_col1, only_1)
+
             # Release the frames before returning; the summary below only
             # needs the scalars computed above.
             del df1, df2, df1_common, df2_common
@@ -450,8 +468,8 @@ class FastBatchValidator:
                 },
                 "column_stats": column_stats,
                 "diff_csv_path": str(diff_csv) if diff_csv else "",
-                "missing_in_file1": sorted(norm_map2.get(s, s) for s in only_2),
-                "missing_in_file2": sorted(norm_map1.get(s, s) for s in only_1),
+                "missing_in_file1": missing_in_file1,
+                "missing_in_file2": missing_in_file2,
             }
         except Exception as e:
             self.logger.error(f"❌ ERROR: {str(e)}", filename=filename)

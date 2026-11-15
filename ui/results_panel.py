@@ -227,10 +227,35 @@ class ResultsPanel(QWidget):
         diff_layout = QVBoxLayout(diff_tab)
         diff_layout.setContentsMargins(0, 0, 0, 0)
         diff_layout.setSpacing(0)
+        # The preview used to mix every pair into one 100-row window, so a
+        # first pair with many differences hid all the others. The picker
+        # narrows the table (and the row cap) to one pair at a time.
+        self._diff_scopes: List[Tuple[str, List[Tuple[str, str]]]] = []
+        scope_bar = QWidget()
+        scope_bar.setObjectName("ScopeBar")
+        scope_layout = QHBoxLayout(scope_bar)
+        scope_layout.setContentsMargins(12, 6, 12, 6)
+        scope_layout.setSpacing(8)
+        scope_label = QLabel("Showing")
+        scope_label.setObjectName("scopeLabel")
+        scope_layout.addWidget(scope_label)
+        self.diff_scope_combo = QComboBox()
+        self.diff_scope_combo.setObjectName("diffScopeCombo")
+        self.diff_scope_combo.setMinimumWidth(260)
+        self.diff_scope_combo.currentIndexChanged.connect(
+            lambda _index: self._apply_diff_scope()
+        )
+        scope_layout.addWidget(self.diff_scope_combo)
+        self.diff_scope_note = QLabel()
+        self.diff_scope_note.setObjectName("scopeCaption")
+        scope_layout.addWidget(self.diff_scope_note)
         self.diff_caption = QLabel()
         self.diff_caption.setObjectName("DiffCaption")
-        self.diff_caption.setContentsMargins(12, 6, 12, 6)
-        diff_layout.addWidget(self.diff_caption)
+        # Right-aligned so the "Left / Right" legend does not run into the
+        # row-count note sitting next to the picker.
+        self.diff_caption.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        scope_layout.addWidget(self.diff_caption, stretch=1)
+        diff_layout.addWidget(scope_bar)
 
         self.diff_table = QTableWidget(0, 5)
         self.diff_table.setObjectName("DiffTable")
@@ -305,6 +330,11 @@ class ResultsPanel(QWidget):
         self.rate_scope_combo.blockSignals(False)
         self.rate_caption.clear()
         self.diff_caption.clear()
+        self.diff_scope_note.clear()
+        self._diff_scopes = []
+        self.diff_scope_combo.blockSignals(True)
+        self.diff_scope_combo.clear()
+        self.diff_scope_combo.blockSignals(False)
         self.column_table.clearSpans()
         self.file_table.clearSpans()
         self.diff_table.clearSpans()
@@ -343,6 +373,10 @@ class ResultsPanel(QWidget):
         """Render a single centred message row spanning all columns."""
         table.clearSpans()
         table.setRowCount(1)
+        # Without this the row keeps the cells from the previous render: the
+        # span hides them visually, but they are still there to be read (and
+        # reappear the moment a span is cleared).
+        table.clearContents()
         item = QTableWidgetItem(message)
         item.setTextAlignment(Qt.AlignCenter)
         item.setForeground(QColor(TEXT_SECONDARY))
@@ -745,8 +779,50 @@ class ResultsPanel(QWidget):
             if header_item is not None:
                 header_item.setToolTip(f"{label_text}\n{path}" if path else label_text)
 
-        preview_rows: List[List[str]] = []
+        self._diff_scopes = self._build_diff_scopes()
+        combo = self.diff_scope_combo
+        combo.blockSignals(True)
+        combo.clear()
+        for label, _paths in self._diff_scopes:
+            combo.addItem(label)
+        combo.setCurrentIndex(0)
+        combo.setEnabled(len(self._diff_scopes) > 1)
+        combo.blockSignals(False)
+
+        if not self._diff_scopes:
+            if results.get("diff_export_enabled") is False:
+                message = (
+                    "Difference export was turned off for this run. "
+                    "Tick 'Export Differences' before starting to "
+                    "get the per-cell detail."
+                )
+            else:
+                message = "No cell-level differences to preview."
+            self._show_empty_message(self.diff_table, 5, message)
+            return
+
+        self._apply_diff_scope()
+
+    def _build_diff_scopes(self) -> List[Tuple[str, List[Tuple[str, str]]]]:
+        """The aggregate first, then one entry per pair that has a diff file."""
+        if not self._diff_csv_paths:
+            return []
+        scopes: List[Tuple[str, List[Tuple[str, str]]]] = []
+        if len(self._diff_csv_paths) > 1:
+            scopes.append(("All pairs", list(self._diff_csv_paths)))
         for display_name, diff_path in self._diff_csv_paths:
+            scopes.append((display_name, [(display_name, diff_path)]))
+        return scopes
+
+    def _apply_diff_scope(self) -> None:
+        """Render the preview for the selected scope, capped per scope."""
+        index = self.diff_scope_combo.currentIndex()
+        if index < 0 or index >= len(self._diff_scopes):
+            return
+        label, paths = self._diff_scopes[index]
+
+        preview_rows: List[List[str]] = []
+        for display_name, diff_path in paths:
             if len(preview_rows) >= DIFF_PREVIEW_LIMIT:
                 break
             try:
@@ -764,19 +840,22 @@ class ResultsPanel(QWidget):
             except Exception:
                 continue
 
+        total = len(paths)
+        shown = len(preview_rows)
+        if label == "All pairs":
+            note = f"first {shown} of up to {DIFF_PREVIEW_LIMIT} rows, {total} pairs"
+        else:
+            note = f"{shown} of up to {DIFF_PREVIEW_LIMIT} rows from this pair"
+        self.diff_scope_note.setText(note)
+
         if not preview_rows:
-            if results.get("diff_export_enabled") is False:
-                message = (
-                    "Difference export was turned off for this run. "
-                    "Tick 'Export Differences' before starting to "
-                    "get the per-cell detail."
-                )
-            else:
-                message = "No cell-level differences to preview."
-            self._show_empty_message(self.diff_table, 5, message)
+            self._show_empty_message(
+                self.diff_table, 5, "No cell-level differences in this pair."
+            )
             return
 
-        self.diff_table.setRowCount(len(preview_rows))
+        self.diff_table.clearSpans()
+        self.diff_table.setRowCount(shown)
         for row_idx, (sku, column, v1, v2, pair_name) in enumerate(preview_rows):
             self.diff_table.setItem(row_idx, 0, QTableWidgetItem(str(sku)))
             self.diff_table.setItem(row_idx, 1, QTableWidgetItem(column))

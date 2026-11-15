@@ -49,7 +49,12 @@ from datetime import date, datetime
 from functools import lru_cache
 from typing import Dict, List
 
+import numpy as np
 import polars as pl
+
+# A column with no differences must not allocate; every branch below can then
+# use ``.size`` without an is-None check.
+_EMPTY_INDEX = np.empty(0, dtype=np.uint32)
 
 
 class ColumnMatchStats:
@@ -372,34 +377,45 @@ class ColumnMatchStats:
                 only1_count = int(only1.sum())
                 only2_count = int(only2.sum())
 
-                need_idx = need_check.arg_true().to_list()
-                failing = set()
-                if need_idx:
+                # Row positions stay as numpy arrays: a column where most
+                # cells differ produced three Python lists of 150k ints here
+                # (need_idx, the failing set, the sorted union), which cost
+                # more than the data they described.
+                need_idx = need_check.arg_true().to_numpy()
+                failing = _EMPTY_INDEX
+                if need_idx.size:
                     sub1 = s1.gather(need_idx).to_list()
                     sub2 = s2.gather(need_idx).to_list()
-                    for pos, idx in enumerate(need_idx):
-                        if not values_equal(sub1[pos], sub2[pos]):
-                            failing.add(idx)
+                    equal = np.fromiter(
+                        (values_equal(a, b) for a, b in zip(sub1, sub2)),
+                        dtype=bool,
+                        count=need_idx.size,
+                    )
+                    failing = need_idx[~equal]
 
                 # Tier-two rows that passed the equivalence rules are matches
                 # too. Omitting them made the counters fail to add up to
                 # total_compared (e.g. "11.00" vs "11" counted as neither).
-                equivalent = len(need_idx) - len(failing)
+                equivalent = int(need_idx.size - failing.size)
                 exact_matches = both_nan + int(exact_fast.sum()) + equivalent
-                mismatches = only1_count + only2_count + len(failing)
+                mismatches = only1_count + only2_count + int(failing.size)
                 total_compared = row_count
 
                 # Emit mismatch rows in DataFrame order for a stable diff file.
-                only1_idx = only1.arg_true().to_list()
-                only2_idx = only2.arg_true().to_list()
-                if stream is not None and (only1_idx or only2_idx or failing):
-                    mismatch_idx = sorted(set(only1_idx) | set(only2_idx) | failing)
+                only1_idx = only1.arg_true().to_numpy()
+                only2_idx = only2.arg_true().to_numpy()
+                if stream is not None and (
+                    only1_idx.size or only2_idx.size or failing.size
+                ):
+                    # union1d sorts and de-duplicates, same as the old
+                    # sorted(set(...)) but without the Python objects.
+                    mismatch_idx = np.union1d(np.union1d(only1_idx, only2_idx), failing)
                     for start in range(
-                        0, len(mismatch_idx), ColumnMatchStats._WRITE_CHUNK_ROWS
+                        0, mismatch_idx.size, ColumnMatchStats._WRITE_CHUNK_ROWS
                     ):
                         chunk = mismatch_idx[
                             start : start + ColumnMatchStats._WRITE_CHUNK_ROWS
-                        ]
+                        ].tolist()
                         frame = ColumnMatchStats._diff_frame(
                             df1_common, s1, s2, e1, e2, col, chunk
                         )

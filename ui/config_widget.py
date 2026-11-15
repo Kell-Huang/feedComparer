@@ -150,6 +150,11 @@ class ComparisonConfigWidget(QWidget):
         self.workers_spin.setRange(1, 16)
         self.workers_spin.setValue(4)
         self.workers_spin.setFixedWidth(70)
+        self.workers_spin.setToolTip(
+            "Files compared at the same time. Each worker keeps its own copy of "
+            "the data — roughly +30 MB per worker on a 150k-row feed — so lower "
+            "this if memory is tight."
+        )
         bottom_layout.addWidget(self.workers_spin)
         bottom_layout.addSpacing(20)
         self.filter_label = QLabel("File Filter:")

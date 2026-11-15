@@ -864,3 +864,66 @@ def test_table_headers_align_with_their_cells():
                 f"{_horizontal(cell.textAlignment())}"
             )
     panel.deleteLater()
+
+
+def test_differences_tab_scopes_to_a_single_pair():
+    """The preview used to mix every pair into one 100-row window."""
+    _app()
+    from ui.results_panel import ResultsPanel
+
+    panel = ResultsPanel()
+    results = _results()
+    panel.render(results)
+
+    combo = panel.diff_scope_combo
+    pair_names = [name for name, _path in panel.get_diff_paths()]
+    assert combo.count() == len(pair_names) + 1  # "All pairs" + each
+    assert combo.itemText(0) == "All pairs"
+
+    # Every individual scope shows only its own rows. Some pairs have no
+    # differences at all, so the assertion is "whatever is shown belongs to
+    # this pair", not "something is shown".
+    scoped_rows = 0
+    for index in range(1, combo.count()):
+        combo.setCurrentIndex(index)
+        pair = combo.itemText(index)
+        shown = {
+            panel.diff_table.item(row, 4).text()
+            for row in range(panel.diff_table.rowCount())
+            if panel.diff_table.item(row, 4) is not None
+        }
+        assert shown <= {pair}, (pair, shown)
+        scoped_rows += panel.diff_table.rowCount()
+    assert scoped_rows > 0, "no pair produced any preview rows"
+    assert "this pair" in panel.diff_scope_note.text()
+
+    # Back to the aggregate: rows from several pairs again.
+    combo.setCurrentIndex(0)
+    assert panel.diff_table.rowCount() > 0
+    assert "pairs" in panel.diff_scope_note.text()
+    panel.deleteLater()
+
+
+def test_differences_tab_hides_the_picker_for_a_single_pair():
+    _app()
+    from ui.results_panel import ResultsPanel
+
+    results = _results()
+    one_name = next(iter(results["files"]))
+    only_one = {
+        "files": {one_name: results["files"][one_name]},
+        "overall": results["overall"],
+        "overall_column_stats": results["overall_column_stats"],
+        "debug_logs": [],
+        "sku_detection_log": [],
+        "source": "file",
+        "diff_export_enabled": True,
+    }
+    panel = ResultsPanel()
+    panel.render(only_one)
+
+    # One pair means one scope, and a disabled picker rather than a menu with
+    # a single meaningless entry.
+    assert panel.diff_scope_combo.count() == 1
+    assert not panel.diff_scope_combo.isEnabled()
+    panel.deleteLater()

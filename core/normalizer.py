@@ -113,10 +113,15 @@ class SKUNormalizer:
         # Restrict the Python fallback to the rows that actually need it.
         non_ascii = out.str.contains(_NON_ASCII_PATTERN)
         if bool(non_ascii.any()):
-            values = out.to_list()
-            for idx in non_ascii.arg_true().to_list():
-                values[idx] = self.normalize(values[idx])
-            out = pl.Series(name, values, dtype=pl.String)
+            # Only the rows that need the Python path are materialised: a feed
+            # with three CJK titles used to convert the whole column.
+            indices = non_ascii.arg_true()
+            fixed = pl.Series(
+                "v",
+                [self.normalize(value) for value in out.gather(indices).to_list()],
+                dtype=pl.String,
+            )
+            out = out.scatter(indices, fixed)
 
         return out.rename(name)
 
