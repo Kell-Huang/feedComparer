@@ -1,0 +1,21 @@
+# Formatter settings, shared by every editor and by any CI run.
+#
+# This file exists because of isort, not black. Without it isort falls back to
+# its own defaults (GRID layout, 79 columns), which conflict with black: black
+# then rewraps the import blocks isort just wrote, and every save ping-pongs
+# the two. `profile = "black"` makes isort emit exactly what black expects.
+#
+#   isort . && black .
+#
+# Both read this file, so no command-line flags are needed.
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+line_length = 88
+# Pinned so the classification cannot change with the machine: without it
+# isort infers first-party from src_paths, and an installed package that
+# happens to be called "core" would silently move these into third-party.
+known_first_party = ["core", "ui"]

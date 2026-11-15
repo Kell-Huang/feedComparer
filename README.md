@@ -109,6 +109,17 @@ python tests/run_tests.py scale     # large-batch + edge cases
 Suites: `core`, `progress`, `downloader`, `ui`, `flow`, `scale`. No pytest
 required, though every test is pytest-compatible.
 
+## Formatting
+
+```bash
+isort . && black .
+```
+
+Both tools read `pyproject.toml`, so no flags are needed — and no editor
+settings should pass any. isort's own defaults (GRID layout, 79 columns)
+conflict with black, so the config pins `profile = "black"`; without it the two
+rewrite each other's output on every save.
+
 The `scale` suite generates its fixtures into a temporary directory at runtime
 (150k rows × 20 columns, 40k × 119 columns, 40 pairs, 10k XML items, 15k Excel
 rows, 80k rows inside a ZIP) and deletes them on exit. Diff counts are asserted
