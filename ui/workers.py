@@ -30,7 +30,7 @@ import tempfile
 import threading
 import traceback
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import requests
 from PySide6.QtCore import QThread, Signal
@@ -39,6 +39,32 @@ from core.downloader import BatchDownloader
 from core.models import DownloadPair, DownloadSession, PairSource
 from core.progress import DOWNLOAD_SPAN, VALIDATE_SPAN
 from core.validator import FastBatchValidator
+
+
+def folder_labels(path1: str, path2: str) -> Tuple[str, str]:
+    """Short, unambiguous labels for two folder paths.
+
+    File mode used to report empty site labels, so every result table fell back
+    to generic "Value F1" / "Value F2" headings and there was no way to tell
+    which folder a value came from. The last path component is what a user
+    recognises; if both sides share it (``.../old/site_a`` vs ``.../new/site_a``)
+    the parent directory is prepended so the two sides stay distinguishable.
+    """
+    def short(path_text: str) -> str:
+        path = Path(path_text)
+        return path.name or path.drive or str(path)
+
+    first, second = short(path1), short(path2)
+    if first == second:
+        parent1, parent2 = Path(path1).parent.name, Path(path2).parent.name
+        if parent1:
+            first = f"{parent1}/{first}"
+        if parent2:
+            second = f"{parent2}/{second}"
+    if first == second:
+        # Still identical (e.g. two drive roots): fall back to the full path.
+        first, second = str(Path(path1)), str(Path(path2))
+    return first, second
 
 
 # Platform metadata calls are small JSON requests; a bounded timeout keeps a
@@ -450,8 +476,13 @@ class ValidationWorker(QThread):
                 return
 
             results['cleanup'] = validator.cleanup
-            results['site1_label'] = ''
-            results['site2_label'] = ''
+            # Name the two sides after their folders; without this every
+            # result table falls back to "Value F1" / "Value F2".
+            results['site1_label'], results['site2_label'] = folder_labels(
+                self.folder1, self.folder2
+            )
+            results['site1_path'] = self.folder1
+            results['site2_path'] = self.folder2
             results['source'] = 'file'
             self.results_ready.emit(results)
         except Exception as e:

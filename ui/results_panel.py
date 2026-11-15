@@ -10,6 +10,8 @@ Data contract (``render(results)``):
     results['api_log_lines']        list    [str]   (optional; API log)
     results['site1_label']          str     optional
     results['site2_label']          str     optional
+    results['site1_path']           str     optional  (full path for tooltips)
+    results['site2_path']           str     optional
     results['source']               str     'file' | 'api' | 'manual'
 
 Presentation rules:
@@ -32,8 +34,9 @@ from typing import List, Optional, Tuple
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QAbstractItemView, QHeaderView, QLabel, QPlainTextEdit, QTabWidget,
-    QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget,
+    QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QLabel,
+    QPlainTextEdit, QTabWidget, QTableWidget, QTableWidgetItem, QTextBrowser,
+    QVBoxLayout, QWidget,
 )
 
 from .delegates import BadgeDelegate
@@ -79,6 +82,11 @@ def _number_cell(text: str, alignment=RIGHT) -> QTableWidgetItem:
     return item
 
 
+def _elide(text: str, limit: int) -> str:
+    """Trim to ``limit`` characters, marking the cut with an ellipsis."""
+    return text if len(text) <= limit else text[: limit - 1] + '…'
+
+
 class ResultsPanel(QWidget):
     """Renders merged validator results; exposes diff CSV paths for export."""
 
@@ -111,15 +119,51 @@ class ResultsPanel(QWidget):
         self.summary_text.setOpenExternalLinks(False)
         self.tabs.addTab(self.summary_text, "Summary")
 
-        self.column_table = QTableWidget(0, 8)
+        # Column rates are aggregated across every pair by default, which made
+        # it impossible to tell which files a row belonged to. The scope picker
+        # narrows the table to a single pair, where the columns are unambiguous.
+        self._rate_scopes: List[Tuple[str, dict, str]] = []
+        rate_tab = QWidget()
+        rate_layout = QVBoxLayout(rate_tab)
+        rate_layout.setContentsMargins(0, 0, 0, 0)
+        rate_layout.setSpacing(0)
+
+        scope_bar = QWidget()
+        scope_bar.setObjectName("ScopeBar")
+        scope_layout = QHBoxLayout(scope_bar)
+        scope_layout.setContentsMargins(12, 6, 12, 6)
+        scope_layout.setSpacing(8)
+        scope_label = QLabel("Showing")
+        scope_label.setObjectName("scopeLabel")
+        scope_layout.addWidget(scope_label)
+        self.rate_scope_combo = QComboBox()
+        self.rate_scope_combo.setObjectName("rateScopeCombo")
+        self.rate_scope_combo.setMinimumWidth(280)
+        self.rate_scope_combo.currentIndexChanged.connect(
+            lambda _index: self._apply_rate_scope()
+        )
+        scope_layout.addWidget(self.rate_scope_combo)
+        self.rate_caption = QLabel()
+        self.rate_caption.setObjectName("scopeCaption")
+        scope_layout.addWidget(self.rate_caption, stretch=1)
+        rate_layout.addWidget(scope_bar)
+
+        self.column_table = QTableWidget(0, 9)
         self.column_table.setObjectName("ColumnTable")
         self.column_table.setHorizontalHeaderLabels([
             'Column', 'Status', 'Match Rate', 'Matches',
-            'Mismatches', 'Total', 'Both Empty', 'One-side Empty',
+            'Mismatches', 'Total', 'Both Empty', 'One-side Empty', 'Pairs',
         ])
         self._configure_table(self.column_table, stretch_column=0)
         self.column_table.setItemDelegateForColumn(1, BadgeDelegate(self.column_table))
-        self.tabs.addTab(self.column_table, "Column Match Rates")
+        pairs_header = self.column_table.horizontalHeaderItem(8)
+        if pairs_header is not None:
+            pairs_header.setToolTip(
+                "How many pairs contain this column. Only meaningful in the "
+                "aggregate view; hidden when a single pair is selected."
+            )
+        rate_layout.addWidget(self.column_table, stretch=1)
+        self.tabs.addTab(rate_tab, "Column Match Rates")
 
         # Log lines are fixed-width columns; wrapping destroys the alignment
         # and makes the timestamps impossible to scan.
@@ -144,6 +188,17 @@ class ResultsPanel(QWidget):
         self._configure_table(self.file_table, stretch_column=0)
         self.tabs.addTab(self.file_table, "Files")
 
+        # A caption spells out which side each value column belongs to; the
+        # two value columns are otherwise indistinguishable without hovering.
+        diff_tab = QWidget()
+        diff_layout = QVBoxLayout(diff_tab)
+        diff_layout.setContentsMargins(0, 0, 0, 0)
+        diff_layout.setSpacing(0)
+        self.diff_caption = QLabel()
+        self.diff_caption.setObjectName("DiffCaption")
+        self.diff_caption.setContentsMargins(12, 6, 12, 6)
+        diff_layout.addWidget(self.diff_caption)
+
         self.diff_table = QTableWidget(0, 5)
         self.diff_table.setObjectName("DiffTable")
         self.diff_table.setHorizontalHeaderLabels(
@@ -152,7 +207,8 @@ class ResultsPanel(QWidget):
         self._configure_table(self.diff_table, stretch_column=2)
         header = self.diff_table.horizontalHeader()
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        self.tabs.addTab(self.diff_table, "Differences")
+        diff_layout.addWidget(self.diff_table, stretch=1)
+        self.tabs.addTab(diff_tab, "Differences")
 
         layout.addWidget(self.tabs)
         self.tabs.setCurrentIndex(TAB_SUMMARY)
@@ -207,9 +263,15 @@ class ResultsPanel(QWidget):
     def clear(self) -> None:
         self._results = None
         self._diff_csv_paths = []
+        self._rate_scopes = []
         self.summary_text.clear()
         self.log_text.clear()
         self.sku_log_text.clear()
+        self.rate_scope_combo.blockSignals(True)
+        self.rate_scope_combo.clear()
+        self.rate_scope_combo.blockSignals(False)
+        self.rate_caption.clear()
+        self.diff_caption.clear()
         self.column_table.clearSpans()
         self.file_table.clearSpans()
         self.diff_table.clearSpans()
@@ -295,7 +357,14 @@ class ResultsPanel(QWidget):
             '<table cellspacing="0" cellpadding="0">',
             kv('Mode', mode_label),
         ]
-        if source in ('api', 'manual'):
+        if source == 'file':
+            # Name the folders: "Site 1 / Site 2" is meaningless in file mode,
+            # and without labels the reader cannot tell the sides apart.
+            if site1 != '—':
+                parts.append(kv('Baseline folder', site1))
+            if site2 != '—':
+                parts.append(kv('Comparison folder', site2))
+        elif source in ('api', 'manual'):
             parts.append(kv('Site 1', site1))
             parts.append(kv('Site 2', site2))
         parts.append('</table>')
@@ -332,31 +401,96 @@ class ResultsPanel(QWidget):
         # render into a single cell.
         self.column_table.clearSpans()
 
-        if not overall_stats:
+        self._build_rate_scopes(results, overall_stats)
+        if not self._rate_scopes:
+            self.rate_scope_combo.blockSignals(True)
+            self.rate_scope_combo.clear()
+            self.rate_scope_combo.blockSignals(False)
+            self.rate_scope_combo.setEnabled(False)
+            self.rate_caption.clear()
             self._show_empty_message(
-                self.column_table, 8,
+                self.column_table, 9,
                 "No columns compared. All pairs may have failed to download "
                 "or share no common columns."
             )
             return
 
-        self._align_headers(self.column_table,
-                            {0: LEFT, 1: Qt.AlignCenter, **{c: RIGHT for c in range(2, 8)}})
+        self.rate_scope_combo.setEnabled(True)
+        self._apply_rate_scope()
 
+    def _build_rate_scopes(self, results: dict, overall_stats: dict) -> None:
+        """Fill the scope picker: the aggregate first, then one row per pair."""
+        files = results.get('files', {}) or {}
+        per_pair = [
+            (name, result)
+            for name, result in sorted(files.items())
+            if result.get('status') == 'success' and result.get('column_stats')
+        ]
+
+        scopes: List[Tuple[str, dict, str]] = []
+        if overall_stats:
+            count = len(per_pair)
+            caption = (
+                f"Aggregated across {count} pair{'' if count == 1 else 's'}"
+                if count else "Aggregated across all pairs"
+            )
+            scopes.append(('All pairs', overall_stats, caption))
+
+        for name, result in per_pair:
+            stats = result['column_stats']
+            columns = len(stats)
+            scopes.append((
+                name, stats,
+                f"{columns} column{'' if columns == 1 else 's'} compared in this pair",
+            ))
+
+        self._rate_scopes = scopes
+        combo = self.rate_scope_combo
+        combo.blockSignals(True)
+        combo.clear()
+        for label, _stats, _caption in scopes:
+            combo.addItem(label)
+        combo.setCurrentIndex(0)
+        # Long file names are elided in the combo; keep the full value reachable.
+        for index, (label, _stats, _caption) in enumerate(scopes):
+            combo.setItemData(index, label, Qt.ToolTipRole)
+        combo.blockSignals(False)
+
+    def _apply_rate_scope(self) -> None:
+        """Render the column table for the scope currently chosen."""
+        index = self.rate_scope_combo.currentIndex()
+        if index < 0 or index >= len(self._rate_scopes):
+            return
+
+        label, stats_by_col, caption = self._rate_scopes[index]
+        # Index 0 is the aggregate; every other entry is a single pair, where
+        # a "Pairs" count is always 1 and would just be noise.
+        is_aggregate = index == 0 and label == 'All pairs'
+
+        self.rate_caption.setText(caption)
+        self.rate_caption.setToolTip(caption)
+        self.column_table.setColumnHidden(8, not is_aggregate)
+
+        self._align_headers(
+            self.column_table,
+            {0: LEFT, 1: Qt.AlignCenter, **{c: RIGHT for c in range(2, 9)}},
+        )
+
+        self.column_table.clearSpans()
         sorted_cols = sorted(
-            overall_stats.items(),
+            stats_by_col.items(),
             key=lambda kv: kv[1].get('match_rate', 0),
         )
         self.column_table.setRowCount(len(sorted_cols))
 
         for row, (col, stats) in enumerate(sorted_cols):
             rate = stats.get('match_rate', 0)
-            label, background, foreground = status_style(stats.get('status', 'BAD'))
+            label_text, background, foreground = status_style(stats.get('status', 'BAD'))
 
             self.column_table.setItem(row, 0, QTableWidgetItem(col))
 
-            badge = QTableWidgetItem(label)
-            badge.setData(Qt.UserRole, (label, background, foreground))
+            badge = QTableWidgetItem(label_text)
+            badge.setData(Qt.UserRole, (label_text, background, foreground))
             badge.setToolTip(f"{rate:.1f}% match")
             self.column_table.setItem(row, 1, badge)
 
@@ -371,6 +505,11 @@ class ResultsPanel(QWidget):
             self.column_table.setItem(row, 6, _number_cell(f"{stats.get('both_nan', 0):,}"))
             one_side = stats.get('only_file1_nan', 0) + stats.get('only_file2_nan', 0)
             self.column_table.setItem(row, 7, _number_cell(f"{one_side:,}"))
+
+            file_count = stats.get('file_count', 1)
+            pairs_item = _number_cell(f"{file_count:,}")
+            pairs_item.setToolTip(f"Column present in {file_count} pair(s)")
+            self.column_table.setItem(row, 8, pairs_item)
 
     def _render_logs(self, results: dict) -> None:
         lines: List[str] = []
@@ -518,10 +657,28 @@ class ResultsPanel(QWidget):
     def _render_diffs(self, results: dict) -> None:
         site1_label = results.get('site1_label', '') or 'Value F1'
         site2_label = results.get('site2_label', '') or 'Value F2'
+        site1_path = results.get('site1_path', '') or ''
+        site2_path = results.get('site2_path', '') or ''
         self.diff_table.setHorizontalHeaderLabels(
             ['SKU', 'Column', site1_label, site2_label, 'Pair']
         )
         self.diff_table.clearSpans()
+
+        # Spell out which side each value column belongs to. With two value
+        # columns side by side, a header alone does not say which folder (or
+        # which site) it came from once the labels are long enough to elide.
+        left = f"Left: {site1_label}" + (f"  ({site1_path})" if site1_path else "")
+        right = f"Right: {site2_label}" + (f"  ({site2_path})" if site2_path else "")
+        self.diff_caption.setText(f"{_elide(left, 72)}      {_elide(right, 72)}")
+        self.diff_caption.setToolTip(f"{left}\n{right}")
+
+        for column, label_text, path in ((2, site1_label, site1_path),
+                                         (3, site2_label, site2_path)):
+            header_item = self.diff_table.horizontalHeaderItem(column)
+            if header_item is not None:
+                header_item.setToolTip(
+                    f"{label_text}\n{path}" if path else label_text
+                )
 
         preview_rows: List[List[str]] = []
         for display_name, diff_path in self._diff_csv_paths:

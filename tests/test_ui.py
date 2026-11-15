@@ -417,3 +417,82 @@ def test_no_empty_family_fonts():
             if "QFont('')" in line or 'QFont("")' in line:
                 offenders.append(f'{path.name}:{number}')
     assert not offenders, f'empty-family QFont at {offenders}'
+
+
+def test_folder_labels_are_short_and_unambiguous():
+    """File mode names the two sides after their folders."""
+    from ui.workers import folder_labels
+
+    assert folder_labels('D:/feeds/site_a', 'D:/feeds/site_b') == ('site_a', 'site_b')
+    # Same basename on both sides: prepend the parent so they stay distinct.
+    assert folder_labels('D:/old/site_a', 'D:/new/site_a') == ('old/site_a', 'new/site_a')
+    # Still identical: fall back to the full paths.
+    first, second = folder_labels('D:/a/site', 'E:/a/site')
+    assert first != second
+
+
+def test_rate_scope_switches_between_aggregate_and_single_pair():
+    """The aggregate view cannot name its files; the picker must resolve it."""
+    from ui.results_panel import ResultsPanel
+
+    _app()
+    results = _results()
+    results['site1_label'] = 'site_a'
+    results['site2_label'] = 'site_b'
+    panel = ResultsPanel()
+    panel.render(results)
+
+    combo = panel.rate_scope_combo
+    successful = [name for name, res in results['files'].items()
+                  if res.get('status') == 'success' and res.get('column_stats')]
+    assert combo.count() == 1 + len(successful), combo.count()
+    assert combo.itemText(0) == 'All pairs'
+    assert not panel.column_table.isColumnHidden(8)      # Pairs column visible
+    assert 'Aggregated across' in panel.rate_caption.text()
+
+    # Pick the first individual pair: its own columns, no Pairs column.
+    combo.setCurrentIndex(1)
+    assert 'compared in this pair' in panel.rate_caption.text()
+    assert panel.column_table.isColumnHidden(8)
+    pair_stats = results['files'][combo.itemText(1)]['column_stats']
+    assert panel.column_table.rowCount() == len(pair_stats)
+
+    # Back to the aggregate restores the merged row count and the column.
+    combo.setCurrentIndex(0)
+    assert not panel.column_table.isColumnHidden(8)
+    assert panel.column_table.rowCount() == len(results['overall_column_stats'])
+
+
+def test_diff_preview_names_both_sides():
+    """The two value columns must say which folder each side came from."""
+    from ui.results_panel import ResultsPanel
+
+    _app()
+    results = _results()
+    results['site1_label'] = 'site_a'
+    results['site2_label'] = 'site_b'
+    results['site1_path'] = 'D:/feeds/site_a'
+    results['site2_path'] = 'D:/feeds/site_b'
+    panel = ResultsPanel()
+    panel.render(results)
+
+    headers = [panel.diff_table.horizontalHeaderItem(i).text() for i in range(5)]
+    assert headers[2] == 'site_a', headers
+    assert headers[3] == 'site_b', headers
+    caption = panel.diff_caption.text()
+    assert 'site_a' in caption and 'site_b' in caption
+    assert 'D:/feeds/site_a' in panel.diff_caption.toolTip()
+    assert 'D:/feeds/site_b' in panel.diff_caption.toolTip()
+
+
+def test_clear_resets_scope_picker():
+    from ui.results_panel import ResultsPanel
+
+    _app()
+    panel = ResultsPanel()
+    panel.render(_results())
+    assert panel.rate_scope_combo.count() > 0
+    panel.clear()
+    assert panel.rate_scope_combo.count() == 0
+    assert panel.rate_caption.text() == ''
+    assert panel.diff_caption.text() == ''

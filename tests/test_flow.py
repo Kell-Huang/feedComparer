@@ -107,6 +107,17 @@ def test_file_mode_run_end_to_end():
         assert window.results_panel.column_table.rowCount() > 0
         assert window.results_panel.get_diff_paths()
 
+        # File mode names both sides after their folders, so the results
+        # tables say which folder a value came from instead of "Value F1".
+        assert results['site1_label'] == gen.SITE_A, results['site1_label']
+        assert results['site2_label'] == gen.SITE_B, results['site2_label']
+        headers = [window.results_panel.diff_table.horizontalHeaderItem(i).text()
+                   for i in range(5)]
+        assert headers[2:4] == [gen.SITE_A, gen.SITE_B], headers
+        # And the column-rate table can be narrowed to a single pair.
+        assert window.results_panel.rate_scope_combo.count() > 1
+        assert window.results_panel.rate_scope_combo.itemText(0) == 'All pairs'
+
         # Auto-export produced a real archive.
         reports = list(report_dir.glob('*.zip'))
         assert len(reports) == 1, reports
