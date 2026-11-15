@@ -1,4 +1,5 @@
 """Data models shared between core and UI layers."""
+
 import shutil
 from dataclasses import dataclass, field
 from enum import Enum
@@ -22,6 +23,7 @@ class DownloadPair:
         for fallback naming (e.g. ``url_1``). Empty names degrade gracefully
         in display_name rather than being silently rewritten here.
     """
+
     pair_id: str
     left_name: str
     left_url: str
@@ -46,6 +48,7 @@ class DownloadResult:
       - cancelled=True -> the run was aborted by the user. ``error`` is
         "Cancelled"; callers must not report this as a failure.
     """
+
     pair: DownloadPair
     success: bool
     error: str = ""
@@ -61,12 +64,13 @@ class DownloadSession:
     Contract: ``pairs`` must have unique ``pair_id`` values. Uniqueness is
     enforced by the downloader (which owns id generation), not by this model.
     """
+
     source: PairSource
     site1_label: str = ""
     site2_label: str = ""
     base_dir: Optional[Path] = None
-    pairs: list = field(default_factory=list)            # list[DownloadPair]
-    results: list = field(default_factory=list)          # list[DownloadResult]
+    pairs: list = field(default_factory=list)  # list[DownloadPair]
+    results: list = field(default_factory=list)  # list[DownloadResult]
 
     @property
     def successful(self) -> list:
@@ -89,7 +93,8 @@ class DownloadSession:
         """Map pair_id -> (left_path, right_path). Only populated for successful pairs."""
         return {
             r.pair.pair_id: (r.left_path, r.right_path)
-            for r in self.results if r.success
+            for r in self.results
+            if r.success
         }
 
     def iter_successful(self):
@@ -102,8 +107,13 @@ class DownloadSession:
         """
         for r in self.results:
             if r.success and r.left_path is not None and r.right_path is not None:
-                yield (r.pair.pair_id, r.pair.display_name,
-                       r.left_path.name, r.left_path, r.right_path)
+                yield (
+                    r.pair.pair_id,
+                    r.pair.display_name,
+                    r.left_path.name,
+                    r.left_path,
+                    r.right_path,
+                )
 
     def cleanup(self):
         """Remove the entire run directory tree. Safe to call multiple times."""

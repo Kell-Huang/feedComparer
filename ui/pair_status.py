@@ -10,23 +10,23 @@ Only the rows that are actively downloading get a ``QProgressBar`` widget;
 finished rows fall back to a plain item. That keeps the widget count bounded
 by the worker count rather than by the number of pairs.
 """
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QHBoxLayout, QProgressBar, QTableWidget, QTableWidgetItem, QWidget,
+    QHBoxLayout,
+    QProgressBar,
+    QTableWidget,
+    QTableWidgetItem,
+    QWidget,
 )
 
-from core.progress import (
-    PAIR_CANCELLED,
-    PAIR_DONE,
-    PAIR_DOWNLOADING,
-    PAIR_FAILED,
-)
+from core.progress import PAIR_CANCELLED, PAIR_DONE, PAIR_DOWNLOADING, PAIR_FAILED
 
-_COLOR_PENDING = QColor('#8c8c8c')
-_COLOR_ACTIVE = QColor('#1677ff')
-_COLOR_DONE = QColor('#52c41a')
-_COLOR_FAILED = QColor('#cf1322')
+_COLOR_PENDING = QColor("#8c8c8c")
+_COLOR_ACTIVE = QColor("#1677ff")
+_COLOR_DONE = QColor("#52c41a")
+_COLOR_FAILED = QColor("#cf1322")
 
 MAX_ERROR_CHARS = 28
 
@@ -52,7 +52,7 @@ class PairTableStatus:
         """
         self.active = True
         self._states = {row: None for row in range(row_count)}
-        header = QTableWidgetItem('Status')
+        header = QTableWidgetItem("Status")
         header.setTextAlignment(Qt.AlignCenter)
         self.table.setHorizontalHeaderItem(self.column, header)
 
@@ -60,7 +60,7 @@ class PairTableStatus:
         """Switch back; the owner rebuilds the column on its next render."""
         self.active = False
         self._states.clear()
-        header = QTableWidgetItem('')
+        header = QTableWidgetItem("")
         self.table.setHorizontalHeaderItem(self.column, header)
         for row in range(self.table.rowCount()):
             self._drop_widget(row)
@@ -119,7 +119,7 @@ class PairTableStatus:
             layout.addWidget(bar)
             self.table.setCellWidget(row, self.column, holder)
         bar.setValue(status.percent)
-        bar.setToolTip(status.detail or '')
+        bar.setToolTip(status.detail or "")
 
     def _existing_bar(self, row: int):
         holder = self.table.cellWidget(row, self.column)
@@ -147,17 +147,17 @@ class PairTableStatus:
     @staticmethod
     def _text_for(status) -> str:
         if status is None:
-            return 'Queued'
+            return "Queued"
         if status.state == PAIR_DONE:
-            return 'Done'
+            return "Done"
         if status.state == PAIR_FAILED:
-            error = (status.error or 'Failed').splitlines()[0]
+            error = (status.error or "Failed").splitlines()[0]
             if len(error) > MAX_ERROR_CHARS:
-                error = error[: MAX_ERROR_CHARS - 1] + '…'
-            return f'Failed: {error}'
+                error = error[: MAX_ERROR_CHARS - 1] + "…"
+            return f"Failed: {error}"
         if status.state == PAIR_CANCELLED:
-            return 'Cancelled'
-        return 'Queued'
+            return "Cancelled"
+        return "Queued"
 
     @staticmethod
     def _color_for(state) -> QColor:

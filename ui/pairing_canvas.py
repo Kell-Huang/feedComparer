@@ -25,16 +25,15 @@ Animation is driven by a single timer that only runs while something is
 moving. When the last animation finishes the timer stops, so an idle canvas
 costs nothing — which is also what makes it acceptable on a remote desktop.
 """
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import (QColor, QFontMetrics, QPainter, QPainterPath, QPen,
-                           QPixmap)
+from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QAbstractScrollArea, QWidget
 
 from .theme import DANGER, SUCCESS
-
 
 # Geometry. Chips are laid out in two columns with a gap wide enough for the
 # connectors to be readable even when they cross.
@@ -61,27 +60,28 @@ HIT_TEST_SAMPLES = 12
 
 # Colours mirror styles/main.qss. The canvas paints itself, so it cannot take
 # these from the stylesheet the way a QSS-styled widget would.
-ACCENT = '#2f6fed'
-CHIP_BG = '#f7f8fa'
-BORDER = '#e4e7ec'
-BORDER_STRONG = '#d0d5dd'
-TEXT = '#1f2937'
-MUTED = '#98a2b3'
-LINK = '#c7ccd4'
+ACCENT = "#2f6fed"
+CHIP_BG = "#f7f8fa"
+BORDER = "#e4e7ec"
+BORDER_STRONG = "#d0d5dd"
+TEXT = "#1f2937"
+MUTED = "#98a2b3"
+LINK = "#c7ccd4"
 
 # Link colours per pair state. "downloading" uses a brighter amber than the
 # theme's warning text colour: at a 1.5px stroke the darker #b54708 was hard to
 # tell apart from the failure red.
 LINK_STATE_COLORS = {
-    'downloading': '#d97706',
-    'done': SUCCESS,
-    'failed': DANGER,
+    "downloading": "#d97706",
+    "done": SUCCESS,
+    "failed": DANGER,
 }
 
 
 @dataclass
 class _Pending:
     """A curve that is currently growing or fading out."""
+
     link: Tuple[int, int]
     elapsed: int
     duration: int
@@ -90,7 +90,7 @@ class _Pending:
 class PairingCanvas(QWidget):
     """Two columns of file chips with draggable links between them."""
 
-    links_changed = Signal(list)      # List[Tuple[int, int]]
+    links_changed = Signal(list)  # List[Tuple[int, int]]
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -133,8 +133,9 @@ class PairingCanvas(QWidget):
     # Model
     # ------------------------------------------------------------------
 
-    def set_model(self, left: List[str], right: List[str],
-                  links: List[Tuple[int, int]]) -> None:
+    def set_model(
+        self, left: List[str], right: List[str], links: List[Tuple[int, int]]
+    ) -> None:
         self._left = list(left)
         self._right = list(right)
         self._links = [tuple(link) for link in links]
@@ -157,8 +158,7 @@ class PairingCanvas(QWidget):
         self._invalidate_chips()
         self.update()
 
-    def set_pair_status(self, index: int, state: str,
-                        fraction: float = 0.0) -> None:
+    def set_pair_status(self, index: int, state: str, fraction: float = 0.0) -> None:
         """Colour one link by download state: queued/downloading/done/failed."""
         self._status[index] = (state, fraction)
         self._invalidate_chips()
@@ -189,12 +189,12 @@ class PairingCanvas(QWidget):
     def _chip_rect(self, side: str, index: int) -> QRectF:
         width = self._column_width()
         y = PAD + index * (CHIP_H + ROW_GAP)
-        x = PAD if side == 'left' else self.width() - PAD - width
+        x = PAD if side == "left" else self.width() - PAD - width
         return QRectF(x, y, width, CHIP_H)
 
     def _port_rect(self, side: str, index: int) -> QRectF:
         chip = self._chip_rect(side, index)
-        x = chip.right() - PORT_W if side == 'left' else chip.left()
+        x = chip.right() - PORT_W if side == "left" else chip.left()
         return QRectF(x, chip.top(), PORT_W, chip.height())
 
     def _anchor_point(self, side: str, index: int) -> QPointF:
@@ -210,14 +210,14 @@ class PairingCanvas(QWidget):
         """
         chip = self._chip_rect(side, index)
         left = chip.left() + TEXT_INSET
-        if side == 'right':
+        if side == "right":
             left = chip.left() + PORT_W + TEXT_INSET
         width = max(40.0, chip.width() - PORT_W - TEXT_INSET * 2)
         return QRectF(left, chip.top(), width, chip.height())
 
     def _link_path(self, left_index: int, right_index: int) -> QPainterPath:
-        start = self._anchor_point('left', left_index)
-        end = self._anchor_point('right', right_index)
+        start = self._anchor_point("left", left_index)
+        end = self._anchor_point("right", right_index)
         return self._connector(start, end)
 
     @staticmethod
@@ -233,7 +233,7 @@ class PairingCanvas(QWidget):
         return path
 
     def _port_at(self, pos: QPointF) -> Optional[Tuple[str, int]]:
-        for side, items in (('left', self._left), ('right', self._right)):
+        for side, items in (("left", self._left), ("right", self._right)):
             for index in range(len(items)):
                 if self._port_rect(side, index).contains(pos):
                     return side, index
@@ -259,7 +259,7 @@ class PairingCanvas(QWidget):
         hundred pixels long and 40 segments are visually indistinguishable from
         the real path for hit-testing purposes.
         """
-        best = float('inf')
+        best = float("inf")
         previous = path.pointAtPercent(0.0)
         # Hit testing does not need the animation's resolution: a straight
         # segment is exact at any sample count, and 12 samples put a 5px
@@ -311,8 +311,9 @@ class PairingCanvas(QWidget):
                 if pending.link == link:
                     progress = min(1.0, pending.elapsed / pending.duration)
             if progress < 1.0:
-                self._stroke_partial(painter, path, progress,
-                                     self._link_color(link), 1.5)
+                self._stroke_partial(
+                    painter, path, progress, self._link_color(link), 1.5
+                )
                 continue
             hovered = link == self._hover_link
             colour = DANGER if hovered else self._link_color(link)
@@ -325,7 +326,9 @@ class PairingCanvas(QWidget):
         # Fading links are no longer in self._links, so they need their own
         # geometry: the endpoints still exist as chips.
         for pending in self._fading:
-            if pending.link[0] >= len(self._left) or pending.link[1] >= len(self._right):
+            if pending.link[0] >= len(self._left) or pending.link[1] >= len(
+                self._right
+            ):
                 continue
             alpha = max(0.0, 1.0 - pending.elapsed / pending.duration)
             colour = QColor(LINK)
@@ -338,20 +341,24 @@ class PairingCanvas(QWidget):
         """A small × on the hovered link: the hint that clicking removes it."""
         radius = 8.0
         painter.setPen(QPen(QColor(DANGER), 1.4))
-        painter.setBrush(QColor('#ffffff'))
+        painter.setBrush(QColor("#ffffff"))
         painter.drawEllipse(centre, radius, radius)
         painter.setPen(QPen(QColor(DANGER), 1.8))
-        painter.drawLine(QPointF(centre.x() - 3, centre.y() - 3),
-                         QPointF(centre.x() + 3, centre.y() + 3))
-        painter.drawLine(QPointF(centre.x() + 3, centre.y() - 3),
-                         QPointF(centre.x() - 3, centre.y() + 3))
+        painter.drawLine(
+            QPointF(centre.x() - 3, centre.y() - 3),
+            QPointF(centre.x() + 3, centre.y() + 3),
+        )
+        painter.drawLine(
+            QPointF(centre.x() + 3, centre.y() - 3),
+            QPointF(centre.x() - 3, centre.y() + 3),
+        )
 
     def _paint_pulses(self, painter: QPainter) -> None:
         for pulse in self._pulses:
             if pulse.link[1] >= len(self._right):
                 continue
             ratio = min(1.0, pulse.elapsed / pulse.duration)
-            centre = self._anchor_point('right', pulse.link[1])
+            centre = self._anchor_point("right", pulse.link[1])
             # Start outside the 4px dot, otherwise the ring sits exactly on it
             # and the port reads as hollow rather than as a pulse.
             radius = 6.5 + ratio * 5.5
@@ -393,21 +400,22 @@ class PairingCanvas(QWidget):
         # Doing them per chip was O(chips x links) and showed up at 40 links.
         linked_left = {link[0] for link in self._links}
         linked_right = {link[1] for link in self._links}
-        self._link_positions = {link: position
-                                for position, link in enumerate(self._links)}
+        self._link_positions = {
+            link: position for position, link in enumerate(self._links)
+        }
 
         border_pen = QPen(QColor(BORDER), 1)
         border_strong_pen = QPen(QColor(BORDER_STRONG), 1)
         divider_pen = QPen(QColor(BORDER_STRONG), 1)
         chip_linked_brush = QColor(CHIP_BG)
-        chip_plain_brush = QColor('#ffffff')
-        port_linked_brush = QColor('#dbe7ff')
-        port_hover_brush = QColor('#e8efff')
-        port_plain_brush = QColor('#f2f4f7')
+        chip_plain_brush = QColor("#ffffff")
+        port_linked_brush = QColor("#dbe7ff")
+        port_hover_brush = QColor("#e8efff")
+        port_plain_brush = QColor("#f2f4f7")
         no_pen = Qt.NoPen
 
-        for side, items in (('left', self._left), ('right', self._right)):
-            linked_set = linked_left if side == 'left' else linked_right
+        for side, items in (("left", self._left), ("right", self._right)):
+            linked_set = linked_left if side == "left" else linked_right
             for index, name in enumerate(items):
                 chip = self._chip_rect(side, index)
                 port = self._port_rect(side, index)
@@ -438,10 +446,12 @@ class PairingCanvas(QWidget):
                 painter.restore()
 
                 # Divider between body and port.
-                divider_x = port.left() if side == 'left' else port.right()
+                divider_x = port.left() if side == "left" else port.right()
                 painter.setPen(divider_pen)
-                painter.drawLine(QPointF(divider_x, port.top() + 1),
-                                 QPointF(divider_x, port.bottom() - 1))
+                painter.drawLine(
+                    QPointF(divider_x, port.top() + 1),
+                    QPointF(divider_x, port.bottom() - 1),
+                )
 
                 if linked:
                     colour = QColor(self._port_dot_colour(index, side))
@@ -457,7 +467,9 @@ class PairingCanvas(QWidget):
                 elided = self._elided(name, int(text_rect.width()), metrics)
                 painter.setPen(QColor(TEXT if linked else MUTED))
                 painter.drawText(
-                    text_rect, Qt.AlignVCenter | Qt.AlignLeft, elided,
+                    text_rect,
+                    Qt.AlignVCenter | Qt.AlignLeft,
+                    elided,
                 )
 
     def _port_shape(self, side: str, width: float, height: float) -> QPainterPath:
@@ -469,13 +481,16 @@ class PairingCanvas(QWidget):
 
         radius = 6.0
         path = QPainterPath()
-        if side == 'left':
+        if side == "left":
             path.moveTo(0, 0)
             path.lineTo(width - radius, 0)
             path.arcTo(QRectF(width - 2 * radius, 0, 2 * radius, 2 * radius), 90, -90)
             path.lineTo(width, height - radius)
-            path.arcTo(QRectF(width - 2 * radius, height - 2 * radius,
-                              2 * radius, 2 * radius), 0, -90)
+            path.arcTo(
+                QRectF(width - 2 * radius, height - 2 * radius, 2 * radius, 2 * radius),
+                0,
+                -90,
+            )
             path.lineTo(0, height)
         else:
             path.moveTo(width, 0)
@@ -516,8 +531,13 @@ class PairingCanvas(QWidget):
         painter.drawEllipse(self._drag_pos, 4, 4)
 
     @staticmethod
-    def _stroke_partial(painter: QPainter, path: QPainterPath,
-                        progress: float, colour: str, width: float) -> None:
+    def _stroke_partial(
+        painter: QPainter,
+        path: QPainterPath,
+        progress: float,
+        colour: str,
+        width: float,
+    ) -> None:
         """Draw only the first ``progress`` fraction of a connector."""
         steps = max(2, int(CURVE_SAMPLES * progress))
         polyline = QPainterPath(path.pointAtPercent(0.0))
@@ -528,20 +548,20 @@ class PairingCanvas(QWidget):
         painter.drawPath(polyline)
 
     def _link_color(self, link: Tuple[int, int]) -> str:
-        index = getattr(self, '_link_positions', {}).get(link)
+        index = getattr(self, "_link_positions", {}).get(link)
         if index is None:
             try:
                 index = self._links.index(link)
             except ValueError:
                 return LINK
-        state = self._status.get(index, ('', 0.0))[0]
+        state = self._status.get(index, ("", 0.0))[0]
         return LINK_STATE_COLORS.get(state, LINK)
 
     def _port_dot_colour(self, index: int, side: str) -> str:
         for position, link in enumerate(self._links):
-            if (link[0] if side == 'left' else link[1]) != index:
+            if (link[0] if side == "left" else link[1]) != index:
                 continue
-            state = self._status.get(position, ('', 0.0))[0]
+            state = self._status.get(position, ("", 0.0))[0]
             return LINK_STATE_COLORS.get(state, ACCENT)
         return ACCENT
 
@@ -603,7 +623,10 @@ class PairingCanvas(QWidget):
             self.update()
             return
 
-        if not self._drag_moved and (pos - self._drag_pos).manhattanLength() >= DRAG_THRESHOLD:
+        if (
+            not self._drag_moved
+            and (pos - self._drag_pos).manhattanLength() >= DRAG_THRESHOLD
+        ):
             self._drag_moved = True
         self._drag_pos = pos
         if self._drag_moved:
@@ -643,9 +666,8 @@ class PairingCanvas(QWidget):
         self._anchor = None
 
     @staticmethod
-    def _ordered(first: Tuple[str, int],
-                 second: Tuple[str, int]) -> Tuple[int, int]:
-        if first[0] == 'left':
+    def _ordered(first: Tuple[str, int], second: Tuple[str, int]) -> Tuple[int, int]:
+        if first[0] == "left":
             return first[1], second[1]
         return second[1], first[1]
 
@@ -722,14 +744,15 @@ class PairingCanvas(QWidget):
             self._timer.stop()
 
 
-def _point_segment_distance(point: QPointF, start: QPointF,
-                            end: QPointF) -> float:
+def _point_segment_distance(point: QPointF, start: QPointF, end: QPointF) -> float:
     """Distance from ``point`` to the segment ``start``-``end``."""
     dx = end.x() - start.x()
     dy = end.y() - start.y()
     if dx == 0 and dy == 0:
         return ((point.x() - start.x()) ** 2 + (point.y() - start.y()) ** 2) ** 0.5
-    t = ((point.x() - start.x()) * dx + (point.y() - start.y()) * dy) / (dx * dx + dy * dy)
+    t = ((point.x() - start.x()) * dx + (point.y() - start.y()) * dy) / (
+        dx * dx + dy * dy
+    )
     t = max(0.0, min(1.0, t))
     nearest_x = start.x() + t * dx
     nearest_y = start.y() + t * dy

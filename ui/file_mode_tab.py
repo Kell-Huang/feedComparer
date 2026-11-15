@@ -1,7 +1,14 @@
 """File mode tab: pick two folders and run validation directly."""
+
 from PySide6.QtWidgets import (
-    QFileDialog, QGridLayout, QGroupBox, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QWidget,
+    QFileDialog,
+    QGridLayout,
+    QGroupBox,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QWidget,
 )
 
 from .config_widget import ComparisonConfigWidget
@@ -77,16 +84,17 @@ class FileModeTab(QWidget):
         f2 = self.f2_edit.text().strip()
         if not f1 or not f2:
             show_message(
-                self, "Input Error",
+                self,
+                "Input Error",
                 "Please select both folders before starting.",
                 QMessageBox.Warning,
             )
             return None
         return {
-            'mode': 'file',
-            'folder1': f1,
-            'folder2': f2,
-            'config': self.config_widget.get_config(),
+            "mode": "file",
+            "folder1": f1,
+            "folder2": f2,
+            "config": self.config_widget.get_config(),
         }
 
     def set_running(self, running: bool) -> None:

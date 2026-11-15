@@ -19,6 +19,7 @@ Run-state contract:
     ``error`` or ``cancelled``). Every handler resets the running state, so a
     cancelled run can never leave the UI stuck in "Running...".
 """
+
 import csv
 import json
 import re
@@ -32,8 +33,17 @@ from typing import List, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFileDialog, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QProgressBar,
-    QPushButton, QSplitter, QTabWidget, QVBoxLayout, QWidget,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSplitter,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from core.models import PairSource
@@ -43,11 +53,10 @@ from .api_mode_tab import ApiModeTab
 from .dialogs import CompletionDialog, show_message
 from .file_mode_tab import FileModeTab
 from .icons import make_icon
-from .theme import app_icon
 from .manual_url_tab import ManualUrlTab
 from .results_panel import ResultsPanel
+from .theme import app_icon
 from .workers import DownloadAndCompareWorker, ValidationWorker
-
 
 APP_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = APP_ROOT / "platform_config.json"
@@ -59,7 +68,7 @@ AUTO_EXPORT_DIR = APP_ROOT / "reports"
 MERGE_DIFF_FILES = False
 # Initial value for the "Exclude Columns" field. This is a UI-editable
 # default: the user can change it per run from the configuration panel.
-EXCLUDE_COLUMNS_KEYWORDS = ['stock', 'price']
+EXCLUDE_COLUMNS_KEYWORDS = ["stock", "price"]
 
 # Total cooperative shutdown budget: 10s + 10s = 20s before prompting the user.
 SHUTDOWN_WAIT_MS = 10000
@@ -78,21 +87,22 @@ def _load_config() -> dict:
     }
     try:
         if CONFIG_PATH.exists():
-            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 loaded = json.load(f)
                 if isinstance(loaded, dict):
                     return {**default, **loaded}
     except Exception as e:
         import sys
+
         sys.stderr.write(f"Warning: failed to read {CONFIG_PATH.name}: {e}\n")
     return default
 
 
 def _safe_filename(name: str) -> str:
     """Strip characters that are illegal in file names, and collapse spaces."""
-    cleaned = re.sub(r'[<>:"/\\|?*]', '_', name)
-    cleaned = re.sub(r'\s+', '_', cleaned).strip('_')
-    return cleaned or 'unnamed'
+    cleaned = re.sub(r'[<>:"/\\|?*]', "_", name)
+    cleaned = re.sub(r"\s+", "_", cleaned).strip("_")
+    return cleaned or "unnamed"
 
 
 class MainWindow(QMainWindow):
@@ -113,7 +123,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        self.setWindowTitle('Feed Validator')
+        self.setWindowTitle("Feed Validator")
         self.setMinimumSize(1100, 720)
         self.resize(1500, 1000)
         self.setObjectName("MainWindow")
@@ -139,9 +149,9 @@ class MainWindow(QMainWindow):
 
         self.file_tab = FileModeTab(exclude_keywords=EXCLUDE_COLUMNS_KEYWORDS)
         self.api_tab = ApiModeTab(
-            base_url=self._config['base_url'],
-            headers={"X-Auth-Token": self._config['auth_token']},
-            verify_ssl=self._config.get('verify_ssl', True),
+            base_url=self._config["base_url"],
+            headers={"X-Auth-Token": self._config["auth_token"]},
+            verify_ssl=self._config.get("verify_ssl", True),
             exclude_keywords=EXCLUDE_COLUMNS_KEYWORDS,
         )
         self.manual_tab = ManualUrlTab(exclude_keywords=EXCLUDE_COLUMNS_KEYWORDS)
@@ -198,21 +208,21 @@ class MainWindow(QMainWindow):
 
         self.run_btn = QPushButton("Start Validation")
         self.run_btn.setObjectName("runBtn")
-        self.run_btn.setIcon(make_icon('play', '#ffffff'))
+        self.run_btn.setIcon(make_icon("play", "#ffffff"))
         self.run_btn.setMinimumWidth(180)
         self.run_btn.clicked.connect(self._on_run_clicked)
         layout.addWidget(self.run_btn)
 
         self.export_btn = QPushButton("Export Report")
         self.export_btn.setObjectName("exportBtn")
-        self.export_btn.setIcon(make_icon('download', '#344054'))
+        self.export_btn.setIcon(make_icon("download", "#344054"))
         self.export_btn.setEnabled(False)
         self.export_btn.clicked.connect(self._on_export_requested)
         layout.addWidget(self.export_btn)
 
         self.clear_btn = QPushButton("Clear")
         self.clear_btn.setObjectName("clearBtn")
-        self.clear_btn.setIcon(make_icon('trash', '#344054'))
+        self.clear_btn.setIcon(make_icon("trash", "#344054"))
         self.clear_btn.clicked.connect(self._on_clear_requested)
         layout.addWidget(self.clear_btn)
 
@@ -220,7 +230,7 @@ class MainWindow(QMainWindow):
         # closing the window, which is far too blunt for a slow download.
         self.cancel_btn = QPushButton("Cancel Run")
         self.cancel_btn.setObjectName("cancelRunBtn")
-        self.cancel_btn.setIcon(make_icon('stop', '#b42318'))
+        self.cancel_btn.setIcon(make_icon("stop", "#b42318"))
         self.cancel_btn.setVisible(False)
         self.cancel_btn.clicked.connect(self._on_cancel_clicked)
         layout.addWidget(self.cancel_btn)
@@ -233,14 +243,16 @@ class MainWindow(QMainWindow):
             return
         self._current_worker.request_stop()
         self.cancel_btn.setEnabled(False)
-        self.status_label.setText("Cancelling — waiting for in-flight requests to abort…")
+        self.status_label.setText(
+            "Cancelling — waiting for in-flight requests to abort…"
+        )
 
     def _current_tab(self):
         return self.mode_tabs.currentWidget()
 
     def _on_run_clicked(self) -> None:
         tab = self._current_tab()
-        build = getattr(tab, 'build_run_payload', None)
+        build = getattr(tab, "build_run_payload", None)
         if build is None:
             return
         payload = build()
@@ -263,15 +275,16 @@ class MainWindow(QMainWindow):
 
     def _warn_if_insecure(self) -> None:
         """One-time startup warning when TLS verification is disabled."""
-        if self._config.get('verify_ssl', True):
+        if self._config.get("verify_ssl", True):
             return
         show_message(
-            self, "Insecure TLS",
+            self,
+            "Insecure TLS",
             "SSL certificate verification is DISABLED in platform_config.json.\n\n"
             "Downloads will accept self-signed certificates, which exposes "
             "you to man-in-the-middle attacks. Only do this for trusted "
             "internal services.\n\n"
-            "Set \"verify_ssl\": true in platform_config.json to re-enable "
+            'Set "verify_ssl": true in platform_config.json to re-enable '
             "verification.",
             QMessageBox.Warning,
         )
@@ -281,29 +294,32 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_run_requested(self, payload: dict) -> None:
-        mode = payload.get('mode', '')
-        config = payload.get('config')
+        mode = payload.get("mode", "")
+        config = payload.get("config")
         if config is None:
             show_message(
-                self, "Invalid Request",
+                self,
+                "Invalid Request",
                 "Run request is missing 'config'. This is a UI bug.",
                 QMessageBox.Critical,
             )
             return
 
-        if mode == 'file':
-            if 'folder1' not in payload or 'folder2' not in payload:
+        if mode == "file":
+            if "folder1" not in payload or "folder2" not in payload:
                 show_message(
-                    self, "Invalid Request",
+                    self,
+                    "Invalid Request",
                     "File mode requires 'folder1' and 'folder2'.",
                     QMessageBox.Critical,
                 )
                 return
             self._start_file_validation(payload)
-        elif mode in ('api', 'manual'):
-            if 'pairs' not in payload:
+        elif mode in ("api", "manual"):
+            if "pairs" not in payload:
                 show_message(
-                    self, "Invalid Request",
+                    self,
+                    "Invalid Request",
                     f"{mode} mode requires 'pairs'.",
                     QMessageBox.Critical,
                 )
@@ -311,14 +327,16 @@ class MainWindow(QMainWindow):
             self._start_download_compare(payload)
         else:
             show_message(
-                self, "Unknown Mode",
-                f"Unsupported mode: {mode}", QMessageBox.Critical,
+                self,
+                "Unknown Mode",
+                f"Unsupported mode: {mode}",
+                QMessageBox.Critical,
             )
 
     def _attach_worker(self, worker) -> None:
         """Wire the shared signals and start the worker."""
         worker.progress.connect(self._on_progress)
-        if hasattr(worker, 'pair_status'):
+        if hasattr(worker, "pair_status"):
             worker.pair_status.connect(self._on_pair_status)
         worker.results_ready.connect(self._on_results_ready)
         worker.error.connect(self._on_error)
@@ -332,40 +350,42 @@ class MainWindow(QMainWindow):
     def _start_file_validation(self, payload: dict) -> None:
         self._reset_for_run()
         worker = ValidationWorker(
-            payload['folder1'], payload['folder2'], payload['config'],
+            payload["folder1"],
+            payload["folder2"],
+            payload["config"],
         )
         self._attach_worker(worker)
 
     def _start_download_compare(self, payload: dict) -> None:
-        config = payload['config']
-        mode = payload['mode']
-        source = PairSource.API if mode == 'api' else PairSource.MANUAL
+        config = payload["config"]
+        mode = payload["mode"]
+        source = PairSource.API if mode == "api" else PairSource.MANUAL
 
         # Only API mode sends platform credentials. Manual URLs are user-supplied
         # and may point to third-party servers that must not receive the token.
-        headers = {"X-Auth-Token": self._config['auth_token']} if mode == 'api' else {}
-        verify_ssl = self._config.get('verify_ssl', True)
+        headers = {"X-Auth-Token": self._config["auth_token"]} if mode == "api" else {}
+        verify_ssl = self._config.get("verify_ssl", True)
 
         self._reset_for_run()
         worker = DownloadAndCompareWorker(
-            pairs=payload['pairs'],
-            site1_label=payload.get('site1_label', ''),
-            site2_label=payload.get('site2_label', ''),
+            pairs=payload["pairs"],
+            site1_label=payload.get("site1_label", ""),
+            site2_label=payload.get("site2_label", ""),
             source=source,
             headers=headers,
             verify_ssl=verify_ssl,
-            sku_col=config.get('sku_column'),
-            compare_cols=config.get('compare_columns') or [],
-            normalize_sku=config.get('normalize_sku', True),
-            case_sensitive=config.get('case_sensitive', True),
-            debug=config.get('debug', True),
-            auto_detect=config.get('auto_detect', True),
-            priority_list=config.get('priority_list'),
-            exclude_keywords=config.get('exclude_keywords'),
-            export_diff=config.get('export_diff', True),
-            download_workers=config.get('workers', 4),
-            validate_workers=config.get('workers', 4),
-            download_timeout=int(self._config.get('download_timeout', 120)),
+            sku_col=config.get("sku_column"),
+            compare_cols=config.get("compare_columns") or [],
+            normalize_sku=config.get("normalize_sku", True),
+            case_sensitive=config.get("case_sensitive", True),
+            debug=config.get("debug", True),
+            auto_detect=config.get("auto_detect", True),
+            priority_list=config.get("priority_list"),
+            exclude_keywords=config.get("exclude_keywords"),
+            export_diff=config.get("export_diff", True),
+            download_workers=config.get("workers", 4),
+            validate_workers=config.get("workers", 4),
+            download_timeout=int(self._config.get("download_timeout", 120)),
         )
         worker.log.connect(self._on_api_log)
         self._attach_worker(worker)
@@ -416,7 +436,7 @@ class MainWindow(QMainWindow):
         if self._closing:
             return
         for tab in (self.file_tab, self.api_tab, self.manual_tab):
-            handler = getattr(tab, 'update_pair_status', None)
+            handler = getattr(tab, "update_pair_status", None)
             if handler is not None:
                 handler(status)
 
@@ -430,7 +450,7 @@ class MainWindow(QMainWindow):
             return
         self._finish_run()
 
-        results['api_log_lines'] = list(self._log_lines)
+        results["api_log_lines"] = list(self._log_lines)
         self._current_results = results
         self._on_enable_export(True)
 
@@ -445,7 +465,8 @@ class MainWindow(QMainWindow):
             self.progress_bar.setValue(0)
             self.status_label.setText("Render failed (see Debug Log)")
             show_message(
-                self, "Render Error",
+                self,
+                "Render Error",
                 "Results were computed but the UI failed to display them.\n\n"
                 "Details are in the Debug Log tab. Report export still works "
                 "and includes the full data.",
@@ -463,7 +484,7 @@ class MainWindow(QMainWindow):
         if self._closing:
             return
         self._finish_run()
-        first_line = (message or "Unknown error").split('\n')[0]
+        first_line = (message or "Unknown error").split("\n")[0]
         self.status_label.setText(f"Error: {first_line[:100]}")
         self.progress_bar.setValue(0)
         show_message(self, "Error", first_line[:500], QMessageBox.Critical)
@@ -501,27 +522,30 @@ class MainWindow(QMainWindow):
     def _on_enable_export(self, enabled: bool) -> None:
         self.export_btn.setEnabled(enabled)
 
-    def _show_completion_dialog(self, results: dict, report_path: str = '') -> None:
-        overall = results.get('overall', {})
+    def _show_completion_dialog(self, results: dict, report_path: str = "") -> None:
+        overall = results.get("overall", {})
         summary_data = {
-            'total_pairs': overall.get('total_pairs', 0),
-            'files': overall.get('success', 0),
-            'skipped': overall.get('skipped', 0),
-            'validation_failed': overall.get('validation_failed', overall.get('failed', 0)),
-            'download_failed': overall.get('download_failed', 0),
-            'match_rate': overall.get('avg_match_rate', 0),
-            'diffs': overall.get('total_diffs', 0),
-            'report_path': report_path,
+            "total_pairs": overall.get("total_pairs", 0),
+            "files": overall.get("success", 0),
+            "skipped": overall.get("skipped", 0),
+            "validation_failed": overall.get(
+                "validation_failed", overall.get("failed", 0)
+            ),
+            "download_failed": overall.get("download_failed", 0),
+            "match_rate": overall.get("avg_match_rate", 0),
+            "diffs": overall.get("total_diffs", 0),
+            "report_path": report_path,
         }
         try:
-            CompletionDialog(self, 'Validation Complete', summary_data).exec()
+            CompletionDialog(self, "Validation Complete", summary_data).exec()
         except Exception:
             pass
 
     def _on_clear_requested(self) -> None:
         if self._current_worker is not None:
             show_message(
-                self, "Run in Progress",
+                self,
+                "Run in Progress",
                 "A validation is currently running. Please wait for it to "
                 "complete, or close the window to abort.",
                 QMessageBox.Warning,
@@ -537,7 +561,7 @@ class MainWindow(QMainWindow):
     def _release_resources(self) -> None:
         """Invoke the cleanup closure attached to the current results."""
         if self._current_results:
-            cleanup = self._current_results.get('cleanup')
+            cleanup = self._current_results.get("cleanup")
             if callable(cleanup):
                 try:
                     cleanup()
@@ -553,13 +577,16 @@ class MainWindow(QMainWindow):
     def _on_export_requested(self) -> None:
         if not self._current_results:
             show_message(
-                self, "No Data", "No results to export.", QMessageBox.Warning,
+                self,
+                "No Data",
+                "No results to export.",
+                QMessageBox.Warning,
             )
             return
 
         results = self._current_results
-        site1 = results.get('site1_label', '') or ''
-        site2 = results.get('site2_label', '') or ''
+        site1 = results.get("site1_label", "") or ""
+        site2 = results.get("site2_label", "") or ""
         if site1 and site2:
             default_name = (
                 f"validation_{_safe_filename(site1)}_vs_"
@@ -569,18 +596,25 @@ class MainWindow(QMainWindow):
             default_name = f"validation_{datetime.now():%Y%m%d_%H%M%S}.zip"
 
         path, _ = QFileDialog.getSaveFileName(
-            self, 'Save Report', default_name, 'ZIP Archive (*.zip)',
+            self,
+            "Save Report",
+            default_name,
+            "ZIP Archive (*.zip)",
         )
         if not path:
             return
         try:
             self._export_to_zip(path, results)
             show_message(
-                self, "Success", f"Report saved to:\n{path}", QMessageBox.Information,
+                self,
+                "Success",
+                f"Report saved to:\n{path}",
+                QMessageBox.Information,
             )
         except Exception as e:
             show_message(
-                self, "Export Error",
+                self,
+                "Export Error",
                 f"{e}\n\n{traceback.format_exc()[:500]}",
                 QMessageBox.Critical,
             )
@@ -592,8 +626,8 @@ class MainWindow(QMainWindow):
         try:
             AUTO_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
             results = self._current_results
-            site1 = results.get('site1_label', '') or ''
-            site2 = results.get('site2_label', '') or ''
+            site1 = results.get("site1_label", "") or ""
+            site2 = results.get("site2_label", "") or ""
             if site1 and site2:
                 suffix = f"_{_safe_filename(site1)}_vs_{_safe_filename(site2)}"
             else:
@@ -611,87 +645,111 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _write_csv(path: Path, fieldnames, rows) -> None:
         """Write a small CSV with a fixed column order (stdlib, no pandas)."""
-        with open(path, 'w', encoding='utf-8-sig', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
             writer.writeheader()
             writer.writerows(rows)
 
     def _export_to_zip(self, zip_path: str, results: dict) -> None:
-        site1 = results.get('site1_label', '') or ''
-        site2 = results.get('site2_label', '') or ''
+        site1 = results.get("site1_label", "") or ""
+        site2 = results.get("site2_label", "") or ""
         diff_paths = self.results_panel.get_diff_paths()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
 
-            overall = results.get('overall', {})
+            overall = results.get("overall", {})
             if overall:
-                self._write_csv(tmp / 'Summary.csv', list(overall.keys()), [overall])
+                self._write_csv(tmp / "Summary.csv", list(overall.keys()), [overall])
 
-            col_stats = results.get('overall_column_stats', {})
+            col_stats = results.get("overall_column_stats", {})
             if isinstance(col_stats, dict) and col_stats:
                 rows = [
                     {
-                        'Column': col,
-                        'Status': s.get('status', ''),
-                        'Match_Rate_%': s.get('match_rate', 0),
-                        'Matches': s.get('exact_matches', 0),
-                        'Mismatches': s.get('mismatches', 0),
-                        'Total': s.get('total_compared', 0),
-                        'Both_Empty': s.get('both_nan', 0),
-                        'One_Side_Empty': s.get('only_file1_nan', 0) + s.get('only_file2_nan', 0),
+                        "Column": col,
+                        "Status": s.get("status", ""),
+                        "Match_Rate_%": s.get("match_rate", 0),
+                        "Matches": s.get("exact_matches", 0),
+                        "Mismatches": s.get("mismatches", 0),
+                        "Total": s.get("total_compared", 0),
+                        "Both_Empty": s.get("both_nan", 0),
+                        "One_Side_Empty": s.get("only_file1_nan", 0)
+                        + s.get("only_file2_nan", 0),
                     }
                     for col, s in col_stats.items()
                 ]
-                rows.sort(key=lambda r: r['Match_Rate_%'])
+                rows.sort(key=lambda r: r["Match_Rate_%"])
                 self._write_csv(
-                    tmp / 'Column_Match_Rates.csv',
-                    ['Column', 'Status', 'Match_Rate_%', 'Matches', 'Mismatches',
-                     'Total', 'Both_Empty', 'One_Side_Empty'],
+                    tmp / "Column_Match_Rates.csv",
+                    [
+                        "Column",
+                        "Status",
+                        "Match_Rate_%",
+                        "Matches",
+                        "Mismatches",
+                        "Total",
+                        "Both_Empty",
+                        "One_Side_Empty",
+                    ],
                     rows,
                 )
 
-            files = results.get('files', {})
+            files = results.get("files", {})
             if files:
                 file_rows = []
                 for display_name, r in files.items():
-                    summary = r.get('summary', {}) or {}
-                    file_rows.append({
-                        'File': display_name,
-                        'Pair_ID': r.get('pair_id', ''),
-                        'Status': r.get('status', ''),
-                        'SKU_Col_F1': r.get('sku_col1', ''),
-                        'SKU_Col_F2': r.get('sku_col2', ''),
-                        'Rows_F1': summary.get('rows_file1', ''),
-                        'Rows_F2': summary.get('rows_file2', ''),
-                        'Common_SKUs': summary.get('common_skus', ''),
-                        'Only_In_F1': summary.get('only_in_file1', ''),
-                        'Only_In_F2': summary.get('only_in_file2', ''),
-                        'Total_Differences': summary.get('total_differences', ''),
-                        'Avg_Match_Rate': summary.get('avg_match_rate', ''),
-                        'Error': r.get('error', ''),
-                    })
+                    summary = r.get("summary", {}) or {}
+                    file_rows.append(
+                        {
+                            "File": display_name,
+                            "Pair_ID": r.get("pair_id", ""),
+                            "Status": r.get("status", ""),
+                            "SKU_Col_F1": r.get("sku_col1", ""),
+                            "SKU_Col_F2": r.get("sku_col2", ""),
+                            "Rows_F1": summary.get("rows_file1", ""),
+                            "Rows_F2": summary.get("rows_file2", ""),
+                            "Common_SKUs": summary.get("common_skus", ""),
+                            "Only_In_F1": summary.get("only_in_file1", ""),
+                            "Only_In_F2": summary.get("only_in_file2", ""),
+                            "Total_Differences": summary.get("total_differences", ""),
+                            "Avg_Match_Rate": summary.get("avg_match_rate", ""),
+                            "Error": r.get("error", ""),
+                        }
+                    )
                 self._write_csv(
-                    tmp / 'Files.csv',
-                    ['File', 'Pair_ID', 'Status', 'SKU_Col_F1', 'SKU_Col_F2',
-                     'Rows_F1', 'Rows_F2', 'Common_SKUs', 'Only_In_F1', 'Only_In_F2',
-                     'Total_Differences', 'Avg_Match_Rate', 'Error'],
+                    tmp / "Files.csv",
+                    [
+                        "File",
+                        "Pair_ID",
+                        "Status",
+                        "SKU_Col_F1",
+                        "SKU_Col_F2",
+                        "Rows_F1",
+                        "Rows_F2",
+                        "Common_SKUs",
+                        "Only_In_F1",
+                        "Only_In_F2",
+                        "Total_Differences",
+                        "Avg_Match_Rate",
+                        "Error",
+                    ],
                     file_rows,
                 )
 
-            debug_logs = results.get('debug_logs', [])
+            debug_logs = results.get("debug_logs", [])
             if debug_logs:
                 self._write_csv(
-                    tmp / 'Debug_Log.csv',
-                    ['time', 'category', 'file', 'message'],
+                    tmp / "Debug_Log.csv",
+                    ["time", "category", "file", "message"],
                     debug_logs,
                 )
 
-            api_log_lines = results.get('api_log_lines', []) or self._log_lines
+            api_log_lines = results.get("api_log_lines", []) or self._log_lines
             if api_log_lines:
                 self._write_csv(
-                    tmp / 'API_Log.csv', ['Log'],
-                    [{'Log': line} for line in api_log_lines],
+                    tmp / "API_Log.csv",
+                    ["Log"],
+                    [{"Log": line} for line in api_log_lines],
                 )
 
             if diff_paths:
@@ -703,12 +761,14 @@ class MainWindow(QMainWindow):
                             continue
                         safe = _safe_filename(display_name)
                         self._copy_diff_streaming(
-                            Path(diff_path), tmp / f'Differences_{safe}.csv',
-                            site1, site2,
+                            Path(diff_path),
+                            tmp / f"Differences_{safe}.csv",
+                            site1,
+                            site2,
                         )
 
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-                for csv_file in sorted(tmp.glob('*.csv')):
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for csv_file in sorted(tmp.glob("*.csv")):
                     zf.write(csv_file, csv_file.name)
 
     @staticmethod
@@ -718,28 +778,31 @@ class MainWindow(QMainWindow):
         A diff file can hold millions of rows; reading it into a DataFrame
         just to rename two columns would triple peak memory for no reason.
         """
-        with open(src, 'r', encoding='utf-8-sig', newline='') as f_in, \
-                open(dst, 'w', encoding='utf-8-sig', newline='') as f_out:
-            f_in.readline()          # discard original header
+        with open(src, "r", encoding="utf-8-sig", newline="") as f_in, open(
+            dst, "w", encoding="utf-8-sig", newline=""
+        ) as f_out:
+            f_in.readline()  # discard original header
             writer = csv.writer(f_out)
             if site1 and site2:
-                writer.writerow(['sku', 'column', site1, site2])
+                writer.writerow(["sku", "column", site1, site2])
             else:
-                writer.writerow(['sku', 'column', 'Value_F1', 'Value_F2'])
+                writer.writerow(["sku", "column", "Value_F1", "Value_F2"])
             shutil.copyfileobj(f_in, f_out, _EXPORT_COPY_CHUNK)
 
     def _write_merged_diff(self, tmp: Path, diff_paths, site1: str, site2: str) -> None:
         """Merge per-pair diff CSVs into one file, streaming rows."""
-        with open(tmp / 'Differences.csv', 'w', encoding='utf-8-sig', newline='') as f_out:
+        with open(
+            tmp / "Differences.csv", "w", encoding="utf-8-sig", newline=""
+        ) as f_out:
             writer = csv.writer(f_out)
             if site1 and site2:
-                writer.writerow(['sku', 'column', site1, site2, 'Pair'])
+                writer.writerow(["sku", "column", site1, site2, "Pair"])
             else:
-                writer.writerow(['sku', 'column', 'Value_F1', 'Value_F2', 'Pair'])
+                writer.writerow(["sku", "column", "Value_F1", "Value_F2", "Pair"])
             for display_name, diff_path in diff_paths:
                 if not Path(diff_path).exists():
                     continue
-                with open(diff_path, 'r', encoding='utf-8-sig', newline='') as f_in:
+                with open(diff_path, "r", encoding="utf-8-sig", newline="") as f_in:
                     reader = csv.reader(f_in)
                     next(reader, None)
                     for row in reader:
@@ -755,9 +818,11 @@ class MainWindow(QMainWindow):
         """Cooperative shutdown. Never calls terminate()."""
         if self._current_worker is not None:
             reply = QMessageBox.question(
-                self, 'Confirm Exit',
-                'A validation is still running. Request it to stop and exit?',
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+                self,
+                "Confirm Exit",
+                "A validation is still running. Request it to stop and exit?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
             if reply != QMessageBox.Yes:
                 event.ignore()
@@ -783,11 +848,13 @@ class MainWindow(QMainWindow):
             # We will NOT terminate(): the worker keeps its cancel_event set
             # and will exit at the next checkpoint. Qt cleans up on app exit.
             force = QMessageBox.question(
-                self, 'Force Exit',
-                'The background task is not stopping yet. Force exit?\n\n'
-                'Any files it is currently writing may be incomplete. '
-                'Temporary directories will still be cleaned when it exits.',
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+                self,
+                "Force Exit",
+                "The background task is not stopping yet. Force exit?\n\n"
+                "Any files it is currently writing may be incomplete. "
+                "Temporary directories will still be cleaned when it exits.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
             if force != QMessageBox.Yes:
                 self._closing = False

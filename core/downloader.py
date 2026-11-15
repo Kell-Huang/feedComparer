@@ -43,6 +43,7 @@ Cancellation:
   rather than instantaneous — but files on disk are never left in an
   inconsistent state.
 """
+
 import hashlib
 import shutil
 import tempfile
@@ -72,26 +73,25 @@ from .progress import (
     format_bytes,
 )
 
-
-ALLOWED_EXTENSIONS = {'.csv', '.xlsx', '.xls', '.xml', '.zip'}
-DEFAULT_EXTENSION = '.csv'
+ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".xml", ".zip"}
+DEFAULT_EXTENSION = ".csv"
 CHUNK_SIZE = 256 * 1024
 MAX_ATTEMPTS = 2
 
 # OLE2 compound document header (legacy .xls)
-_OLE2_MAGIC = b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
-_ZIP_MAGIC = b'PK\x03\x04'
+_OLE2_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+_ZIP_MAGIC = b"PK\x03\x04"
 
 _CONTENT_TYPE_EXT = {
-    'text/csv': '.csv',
-    'application/csv': '.csv',
-    'text/plain': '.csv',
-    'application/xml': '.xml',
-    'text/xml': '.xml',
-    'application/zip': '.zip',
-    'application/x-zip-compressed': '.zip',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
-    'application/vnd.ms-excel': '.xls',
+    "text/csv": ".csv",
+    "application/csv": ".csv",
+    "text/plain": ".csv",
+    "application/xml": ".xml",
+    "text/xml": ".xml",
+    "application/zip": ".zip",
+    "application/x-zip-compressed": ".zip",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.ms-excel": ".xls",
 }
 
 _RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
@@ -108,6 +108,7 @@ class DownloadCancelled(DownloadError):
 @dataclass
 class FetchedFile:
     """A completed download plus its detected on-disk format."""
+
     path: Path
     extension: str
 
@@ -126,13 +127,13 @@ def _infer_extension(url: str) -> Optional[str]:
 
 def _url_key(url: str) -> str:
     """Deterministic cache filename for a URL."""
-    return hashlib.sha256(url.encode('utf-8')).hexdigest()
+    return hashlib.sha256(url.encode("utf-8")).hexdigest()
 
 
 def _sniff_extension(path: Path) -> Optional[str]:
     """Detect the real format from the payload. None when inconclusive."""
     try:
-        with open(path, 'rb') as f:
+        with open(path, "rb") as f:
             head = f.read(1024)
     except OSError:
         return None
@@ -144,17 +145,17 @@ def _sniff_extension(path: Path) -> Optional[str]:
             with zipfile.ZipFile(path) as zf:
                 names = zf.namelist()
         except Exception:
-            return '.zip'
-        if any(n.lower() == 'xl/workbook.xml' for n in names):
-            return '.xlsx'
-        return '.zip'
+            return ".zip"
+        if any(n.lower() == "xl/workbook.xml" for n in names):
+            return ".xlsx"
+        return ".zip"
 
     if head[:8] == _OLE2_MAGIC:
-        return '.xls'
+        return ".xls"
 
-    body = head.lstrip(b'\xef\xbb\xbf').lstrip()
-    if body.startswith(b'<?xml') or body.startswith(b'<'):
-        return '.xml'
+    body = head.lstrip(b"\xef\xbb\xbf").lstrip()
+    if body.startswith(b"<?xml") or body.startswith(b"<"):
+        return ".xml"
 
     return None
 
@@ -162,10 +163,14 @@ def _sniff_extension(path: Path) -> Optional[str]:
 class BatchDownloader:
     """Download a list of DownloadPair concurrently with per-run isolation."""
 
-    def __init__(self, headers: Optional[dict] = None,
-                 max_workers: int = 4, timeout: int = 120,
-                 verify_ssl: bool = True,
-                 cancel_event: Optional[threading.Event] = None):
+    def __init__(
+        self,
+        headers: Optional[dict] = None,
+        max_workers: int = 4,
+        timeout: int = 120,
+        verify_ssl: bool = True,
+        cancel_event: Optional[threading.Event] = None,
+    ):
         self.headers = headers or {}
         self.max_workers = max(1, int(max_workers))
         self.timeout = timeout
@@ -200,7 +205,7 @@ class BatchDownloader:
 
     def _session(self) -> requests.Session:
         """Per-thread session so connections are reused within a worker."""
-        session = getattr(self._local, 'session', None)
+        session = getattr(self._local, "session", None)
         if session is None:
             session = requests.Session()
             session.headers.update(self.headers)
@@ -209,8 +214,8 @@ class BatchDownloader:
                 pool_maxsize=self.max_workers,
                 max_retries=0,
             )
-            session.mount('https://', adapter)
-            session.mount('http://', adapter)
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
             self._local.session = session
             with self._sessions_lock:
                 self._sessions.append(session)
@@ -244,15 +249,18 @@ class BatchDownloader:
             done_bytes = sum(self._url_bytes.values())
             total_bytes = sum(self._url_total.get(u, 0) for u in urls)
             done_urls = len(self._url_done)
-            all_sized = bool(urls) and all(
-                self._url_total.get(u, 0) > 0 for u in urls
-            )
+            all_sized = bool(urls) and all(self._url_total.get(u, 0) > 0 for u in urls)
             pairs_total = len(self._pairs)
             pairs_done = 0
-            active_label = ''
+            active_label = ""
             for pair in self._pairs:
                 left, right = pair.left_url, pair.right_url
-                if left and right and left in self._url_done and right in self._url_done:
+                if (
+                    left
+                    and right
+                    and left in self._url_done
+                    and right in self._url_done
+                ):
                     pairs_done += 1
                 elif not active_label:
                     active_label = pair.display_name
@@ -265,16 +273,18 @@ class BatchDownloader:
             detail = f"{done_urls}/{len(urls)} files"
         fraction = 1.0 if complete else computed
 
-        self._progress_cb(ProgressUpdate(
-            phase=PHASE_DOWNLOAD,
-            index=pairs_done,
-            total=pairs_total,
-            label=active_label,
-            fraction=fraction,
-            detail=detail,
-            base=self._base,
-            span=self._span,
-        ))
+        self._progress_cb(
+            ProgressUpdate(
+                phase=PHASE_DOWNLOAD,
+                index=pairs_done,
+                total=pairs_total,
+                label=active_label,
+                fraction=fraction,
+                detail=detail,
+                base=self._base,
+                span=self._span,
+            )
+        )
 
         # Per-pair rows ride on the same tick. Only emit when the integer
         # percentage actually moved, otherwise every tick rewrites every row.
@@ -292,7 +302,7 @@ class BatchDownloader:
         """Fraction and byte detail for one pair, across both of its URLs."""
         urls = [u for u in (pair.left_url, pair.right_url) if u]
         if not urls:
-            return 0.0, ''
+            return 0.0, ""
         with self._state_lock:
             sized = all(self._url_total.get(u, 0) > 0 for u in urls)
             if sized:
@@ -306,14 +316,25 @@ class BatchDownloader:
             done_urls = sum(1 for u in urls if u in self._url_done)
         return done_urls / len(urls), f"{done_urls}/{len(urls)}"
 
-    def _emit_pair(self, index: int, state: str, fraction: float = 0.0,
-                   detail: str = '', error: str = '') -> None:
+    def _emit_pair(
+        self,
+        index: int,
+        state: str,
+        fraction: float = 0.0,
+        detail: str = "",
+        error: str = "",
+    ) -> None:
         if self._pair_cb is None:
             return
-        self._pair_cb(PairStatus(
-            index=index, state=state, fraction=fraction,
-            detail=detail, error=error,
-        ))
+        self._pair_cb(
+            PairStatus(
+                index=index,
+                state=state,
+                fraction=fraction,
+                detail=detail,
+                error=error,
+            )
+        )
 
     def _report_bytes(self, url: str, count: int) -> None:
         with self._state_lock:
@@ -336,16 +357,21 @@ class BatchDownloader:
             if index in self._finalized:
                 continue
             self._finalized.add(index)
-            self._emit_pair(index, PAIR_FAILED, 0.0, '', error)
+            self._emit_pair(index, PAIR_FAILED, 0.0, "", error)
 
     # ------------------------------------------------------------------
     # Run
     # ------------------------------------------------------------------
 
-    def run(self, session: DownloadSession, base_root: Path,
-            progress_callback: Optional[Callable[[ProgressUpdate], None]] = None,
-            pair_callback: Optional[Callable[[PairStatus], None]] = None,
-            base: float = 0.0, span: float = DOWNLOAD_SPAN) -> DownloadSession:
+    def run(
+        self,
+        session: DownloadSession,
+        base_root: Path,
+        progress_callback: Optional[Callable[[ProgressUpdate], None]] = None,
+        pair_callback: Optional[Callable[[PairStatus], None]] = None,
+        base: float = 0.0,
+        span: float = DOWNLOAD_SPAN,
+    ) -> DownloadSession:
         """Download all pairs in session and populate session.results.
 
         If cancel_event is set mid-run, the URL loop breaks, remaining URLs
@@ -391,7 +417,7 @@ class BatchDownloader:
         self._url_done = set()
 
         for index in range(len(session.pairs)):
-            self._emit_pair(index, PAIR_PENDING, 0.0, '')
+            self._emit_pair(index, PAIR_PENDING, 0.0, "")
         self._emit_progress(force=True)
 
         url_to_file: Dict[str, FetchedFile] = {}
@@ -433,28 +459,40 @@ class BatchDownloader:
         cancelled_run = self._is_cancelled()
         results = []
         for index, pair in enumerate(session.pairs):
-            if cancelled_run and pair.left_url not in url_to_file \
-                    and pair.right_url not in url_to_file:
-                results.append(DownloadResult(
-                    pair=pair, success=False, error="Cancelled", cancelled=True,
-                ))
+            if (
+                cancelled_run
+                and pair.left_url not in url_to_file
+                and pair.right_url not in url_to_file
+            ):
+                results.append(
+                    DownloadResult(
+                        pair=pair,
+                        success=False,
+                        error="Cancelled",
+                        cancelled=True,
+                    )
+                )
                 if index not in self._finalized:
                     self._finalized.add(index)
-                    self._emit_pair(index, PAIR_CANCELLED, 0.0, 'Cancelled')
+                    self._emit_pair(index, PAIR_CANCELLED, 0.0, "Cancelled")
                 continue
 
             result = self._assemble_pair(
-                pair, url_to_file, url_to_error, left_dir, right_dir,
+                pair,
+                url_to_file,
+                url_to_error,
+                left_dir,
+                right_dir,
             )
             results.append(result)
             if index not in self._finalized:
                 self._finalized.add(index)
                 if result.success:
-                    self._emit_pair(index, PAIR_DONE, 1.0, '')
+                    self._emit_pair(index, PAIR_DONE, 1.0, "")
                 elif result.cancelled:
-                    self._emit_pair(index, PAIR_CANCELLED, 0.0, 'Cancelled')
+                    self._emit_pair(index, PAIR_CANCELLED, 0.0, "Cancelled")
                 else:
-                    self._emit_pair(index, PAIR_FAILED, 0.0, '', result.error)
+                    self._emit_pair(index, PAIR_FAILED, 0.0, "", result.error)
 
         self._emit_progress(force=True, complete=True)
         session.results = results
@@ -486,7 +524,7 @@ class BatchDownloader:
                 last_error = str(e)
                 cache_path.unlink(missing_ok=True)
                 # Only transient failures are worth a second attempt.
-                if attempt + 1 >= MAX_ATTEMPTS or not getattr(e, 'retryable', False):
+                if attempt + 1 >= MAX_ATTEMPTS or not getattr(e, "retryable", False):
                     raise
         raise DownloadError(last_error)
 
@@ -512,13 +550,13 @@ class BatchDownloader:
                 raise err
 
             try:
-                declared = int(resp.headers.get('Content-Length') or 0)
+                declared = int(resp.headers.get("Content-Length") or 0)
             except (TypeError, ValueError):
                 declared = 0
             if declared > 0:
                 self._reset_url_bytes(url, declared)
 
-            with open(cache_path, 'wb') as f:
+            with open(cache_path, "wb") as f:
                 for chunk in resp.iter_content(chunk_size=CHUNK_SIZE):
                     if self._is_cancelled():
                         raise DownloadCancelled("Cancelled")
@@ -550,54 +588,72 @@ class BatchDownloader:
         url_ext = _infer_extension(url)
         sniffed = _sniff_extension(path)
 
-        if sniffed == '.zip' and url_ext in {'.xlsx', '.xls'}:
+        if sniffed == ".zip" and url_ext in {".xlsx", ".xls"}:
             return url_ext
         if sniffed is not None:
             return sniffed
         if url_ext is not None:
             return url_ext
 
-        content_type = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+        content_type = (
+            (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        )
         return _CONTENT_TYPE_EXT.get(content_type, DEFAULT_EXTENSION)
 
     # ------------------------------------------------------------------
     # Pair assembly
     # ------------------------------------------------------------------
 
-    def _assemble_pair(self, pair: DownloadPair,
-                       url_to_file: Dict[str, FetchedFile],
-                       url_to_error: Dict[str, str],
-                       left_dir: Path, right_dir: Path) -> DownloadResult:
+    def _assemble_pair(
+        self,
+        pair: DownloadPair,
+        url_to_file: Dict[str, FetchedFile],
+        url_to_error: Dict[str, str],
+        left_dir: Path,
+        right_dir: Path,
+    ) -> DownloadResult:
         """Copy a downloaded pair into left/ and right/ with a unified name."""
         if not pair.left_url or not pair.right_url:
-            return DownloadResult(pair=pair, success=False,
-                                  error="Empty URL on one side")
+            return DownloadResult(
+                pair=pair, success=False, error="Empty URL on one side"
+            )
 
         if pair.left_url in url_to_error:
             error = url_to_error[pair.left_url]
-            return DownloadResult(pair=pair, success=False,
-                                  error=f"Left: {error}",
-                                  cancelled=error == "Cancelled")
+            return DownloadResult(
+                pair=pair,
+                success=False,
+                error=f"Left: {error}",
+                cancelled=error == "Cancelled",
+            )
         if pair.right_url in url_to_error:
             error = url_to_error[pair.right_url]
-            return DownloadResult(pair=pair, success=False,
-                                  error=f"Right: {error}",
-                                  cancelled=error == "Cancelled")
+            return DownloadResult(
+                pair=pair,
+                success=False,
+                error=f"Right: {error}",
+                cancelled=error == "Cancelled",
+            )
 
         left_src = url_to_file.get(pair.left_url)
         right_src = url_to_file.get(pair.right_url)
         if left_src is None or right_src is None:
             # Not a cache bug: this is what a cancelled run leaves behind.
             return DownloadResult(
-                pair=pair, success=False, cancelled=True,
+                pair=pair,
+                success=False,
+                cancelled=True,
                 error="Not downloaded (cancelled or interrupted)",
             )
 
         if left_src.extension != right_src.extension:
             return DownloadResult(
-                pair=pair, success=False,
-                error=(f"Extension mismatch: {left_src.extension} vs "
-                       f"{right_src.extension} (the two sides must share a format)"),
+                pair=pair,
+                success=False,
+                error=(
+                    f"Extension mismatch: {left_src.extension} vs "
+                    f"{right_src.extension} (the two sides must share a format)"
+                ),
             )
 
         pair_tag = pair.pair_id
@@ -607,17 +663,21 @@ class BatchDownloader:
         try:
             shutil.copyfile(left_src.path, left_dst)
         except OSError as e:
-            return DownloadResult(pair=pair, success=False,
-                                  error=f"Left copy failed: {e}")
+            return DownloadResult(
+                pair=pair, success=False, error=f"Left copy failed: {e}"
+            )
 
         try:
             shutil.copyfile(right_src.path, right_dst)
         except OSError as e:
             left_dst.unlink(missing_ok=True)
-            return DownloadResult(pair=pair, success=False,
-                                  error=f"Right copy failed: {e}")
+            return DownloadResult(
+                pair=pair, success=False, error=f"Right copy failed: {e}"
+            )
 
         return DownloadResult(
-            pair=pair, success=True,
-            left_path=left_dst, right_path=right_dst,
+            pair=pair,
+            success=True,
+            left_path=left_dst,
+            right_path=right_dst,
         )

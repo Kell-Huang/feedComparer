@@ -1,4 +1,5 @@
 """Small layout helpers shared by the mode tabs."""
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QScrollArea, QVBoxLayout, QWidget
 

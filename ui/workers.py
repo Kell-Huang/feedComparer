@@ -25,6 +25,7 @@ Signal naming: the custom result signal is ``results_ready``, not
 replaces the thread-lifecycle signal and makes ``deleteLater`` wiring
 impossible to reason about.
 """
+
 import copy
 import tempfile
 import threading
@@ -50,6 +51,7 @@ def folder_labels(path1: str, path2: str) -> Tuple[str, str]:
     recognises; if both sides share it (``.../old/site_a`` vs ``.../new/site_a``)
     the parent directory is prepended so the two sides stay distinguishable.
     """
+
     def short(path_text: str) -> str:
         path = Path(path_text)
         return path.name or path.drive or str(path)
@@ -77,6 +79,7 @@ DOWNLOAD_ROOT = Path(tempfile.gettempdir()) / "feed_validator"
 # Platform API workers (projects / sites / channels) - short, non-cancellable
 # ---------------------------------------------------------------------------
 
+
 class _FetchWorker(QThread):
     """Shared plumbing for the short platform-metadata requests."""
 
@@ -86,7 +89,7 @@ class _FetchWorker(QThread):
 
     def __init__(self, base_url: str, headers: dict, verify_ssl: bool = True):
         super().__init__()
-        self.base_url = (base_url or '').rstrip('/')
+        self.base_url = (base_url or "").rstrip("/")
         self.headers = headers or {}
         self.verify_ssl = verify_ssl
 
@@ -100,7 +103,7 @@ class _FetchWorker(QThread):
         if resp.status_code != 200:
             raise RuntimeError(f"HTTP {resp.status_code} from {path}")
         payload = resp.json()
-        if not payload.get('success'):
+        if not payload.get("success"):
             raise RuntimeError(f"API reported failure for {path}")
         return payload
 
@@ -109,8 +112,8 @@ class FetchProjectsWorker(_FetchWorker):
     def run(self):
         try:
             self.log.emit("Fetching project list...")
-            payload = self._get_json('/projects')
-            projects = payload.get('Projects') or []
+            payload = self._get_json("/projects")
+            projects = payload.get("Projects") or []
             project_list = [
                 {"id": p["id"], "name": p.get("name") or f"Project_{p['id']}"}
                 for p in projects
@@ -122,8 +125,14 @@ class FetchProjectsWorker(_FetchWorker):
 
 
 class FetchSitesWorker(_FetchWorker):
-    def __init__(self, base_url: str, headers: dict, project_id,
-                 only_active: bool = False, verify_ssl: bool = True):
+    def __init__(
+        self,
+        base_url: str,
+        headers: dict,
+        project_id,
+        only_active: bool = False,
+        verify_ssl: bool = True,
+    ):
         super().__init__(base_url, headers, verify_ssl)
         self.project_id = project_id
         self.only_active = only_active
@@ -131,23 +140,25 @@ class FetchSitesWorker(_FetchWorker):
     def run(self):
         try:
             self.log.emit("Fetching sites...")
-            payload = self._get_json(f'/projects/{self.project_id}/sites')
-            sites = payload.get('Sites') or []
+            payload = self._get_json(f"/projects/{self.project_id}/sites")
+            sites = payload.get("Sites") or []
             if self.only_active:
-                sites = [s for s in sites if s.get('status') == 'active']
+                sites = [s for s in sites if s.get("status") == "active"]
             seen = set()
             unique_sites = []
             for s in sites:
-                sid = s.get('id')
+                sid = s.get("id")
                 if sid is None or sid in seen:
                     continue
                 seen.add(sid)
-                name = s.get('title') or s.get('name') or f"Site_{sid}"
-                unique_sites.append({
-                    "id": sid,
-                    "name": name,
-                    "status": s.get("status", "unknown"),
-                })
+                name = s.get("title") or s.get("name") or f"Site_{sid}"
+                unique_sites.append(
+                    {
+                        "id": sid,
+                        "name": name,
+                        "status": s.get("status", "unknown"),
+                    }
+                )
             self.log.emit(f"Fetched {len(unique_sites)} unique sites.")
             self.data_ready.emit(unique_sites)
         except Exception as e:
@@ -162,11 +173,11 @@ class FetchChannelsWorker(_FetchWorker):
     def run(self):
         try:
             self.log.emit("Fetching channels...")
-            payload = self._get_json(f'/sites/{self.site_id}/channels')
-            channels = payload.get('Channels') or []
+            payload = self._get_json(f"/sites/{self.site_id}/channels")
+            channels = payload.get("Channels") or []
             channel_list = []
             for ch in channels:
-                feed_dest = ch.get('feed_destinations') or {}
+                feed_dest = ch.get("feed_destinations") or {}
                 link = ""
                 if isinstance(feed_dest, dict):
                     urls = feed_dest.get("2")
@@ -174,10 +185,12 @@ class FetchChannelsWorker(_FetchWorker):
                         link = urls[0] if urls else ""
                     elif urls is not None:
                         link = str(urls)
-                channel_list.append({
-                    "name": ch.get("name") or f"channel_{len(channel_list) + 1}",
-                    "link": link,
-                })
+                channel_list.append(
+                    {
+                        "name": ch.get("name") or f"channel_{len(channel_list) + 1}",
+                        "link": link,
+                    }
+                )
             self.log.emit(f"Fetched {len(channel_list)} channels.")
             self.data_ready.emit(channel_list)
         except Exception as e:
@@ -188,28 +201,42 @@ class FetchChannelsWorker(_FetchWorker):
 # Download + compare worker
 # ---------------------------------------------------------------------------
 
+
 class DownloadAndCompareWorker(QThread):
     """Download a list of pairs, then validate the downloaded tree.
 
     Emits exactly one of ``results_ready`` / ``error`` / ``cancelled``.
     """
+
     log = Signal(str)
-    progress = Signal(object)        # ProgressUpdate
-    pair_status = Signal(object)     # PairStatus
+    progress = Signal(object)  # ProgressUpdate
+    pair_status = Signal(object)  # PairStatus
     results_ready = Signal(dict)
     error = Signal(str)
     cancelled = Signal()
 
-    def __init__(self, pairs: List[DownloadPair], site1_label: str, site2_label: str,
-                 source: PairSource, headers: dict, verify_ssl: bool,
-                 sku_col: Optional[str], compare_cols: List[str],
-                 normalize_sku: bool, case_sensitive: bool, debug: bool,
-                 auto_detect: bool, priority_list: Optional[List[str]],
-                 exclude_keywords: Optional[List[str]],
-                 export_diff: bool = True,
-                 download_workers: int = 4, validate_workers: int = 4,
-                 download_root: Optional[Path] = None,
-                 download_timeout: int = 120):
+    def __init__(
+        self,
+        pairs: List[DownloadPair],
+        site1_label: str,
+        site2_label: str,
+        source: PairSource,
+        headers: dict,
+        verify_ssl: bool,
+        sku_col: Optional[str],
+        compare_cols: List[str],
+        normalize_sku: bool,
+        case_sensitive: bool,
+        debug: bool,
+        auto_detect: bool,
+        priority_list: Optional[List[str]],
+        exclude_keywords: Optional[List[str]],
+        export_diff: bool = True,
+        download_workers: int = 4,
+        validate_workers: int = 4,
+        download_root: Optional[Path] = None,
+        download_timeout: int = 120,
+    ):
         super().__init__()
         self.pairs = [copy.deepcopy(p) for p in pairs]
         self.site1_label = site1_label
@@ -263,7 +290,8 @@ class DownloadAndCompareWorker(QThread):
                 cancel_event=self._cancel_event,
             )
             session = downloader.run(
-                session, self.download_root,
+                session,
+                self.download_root,
                 progress_callback=self.progress.emit,
                 pair_callback=self.pair_status.emit,
                 base=0.0,
@@ -282,22 +310,30 @@ class DownloadAndCompareWorker(QThread):
                     "See Files tab for per-pair errors."
                 )
                 empty_results = {
-                    'files': {}, 'errors': [], 'skipped': [],
-                    'overall': {
-                        'total_pairs': len(session.pairs), 'success': 0,
-                        'failed': 0, 'skipped': 0,
-                        'total_skus': 0, 'total_diffs': 0, 'total_missing': 0,
-                        'avg_match_rate': 0,
+                    "files": {},
+                    "errors": [],
+                    "skipped": [],
+                    "overall": {
+                        "total_pairs": len(session.pairs),
+                        "success": 0,
+                        "failed": 0,
+                        "skipped": 0,
+                        "total_skus": 0,
+                        "total_diffs": 0,
+                        "total_missing": 0,
+                        "avg_match_rate": 0,
                     },
-                    'overall_column_stats': {}, 'debug_logs': [],
-                    'sku_detection_log': [], 'temp_diff_dir': '',
+                    "overall_column_stats": {},
+                    "debug_logs": [],
+                    "sku_detection_log": [],
+                    "temp_diff_dir": "",
                 }
                 merged = self._merge_results(empty_results, session)
-                merged['cleanup'] = session.cleanup
-                merged['site1_label'] = self.site1_label
-                merged['site2_label'] = self.site2_label
-                merged['source'] = self.source.value
-                merged['diff_export_enabled'] = self.export_diff
+                merged["cleanup"] = session.cleanup
+                merged["site1_label"] = self.site1_label
+                merged["site2_label"] = self.site2_label
+                merged["source"] = self.source.value
+                merged["diff_export_enabled"] = self.export_diff
                 self.results_ready.emit(merged)
                 return
 
@@ -341,11 +377,11 @@ class DownloadAndCompareWorker(QThread):
                 _validator.cleanup()
                 _session.cleanup()
 
-            merged['cleanup'] = _cleanup
-            merged['site1_label'] = self.site1_label
-            merged['site2_label'] = self.site2_label
-            merged['source'] = self.source.value
-            merged['diff_export_enabled'] = self.export_diff
+            merged["cleanup"] = _cleanup
+            merged["site1_label"] = self.site1_label
+            merged["site2_label"] = self.site2_label
+            merged["source"] = self.source.value
+            merged["diff_export_enabled"] = self.export_diff
 
             self.results_ready.emit(merged)
 
@@ -379,11 +415,11 @@ class DownloadAndCompareWorker(QThread):
             filename_to_info[filename] = (display_name, pair_id)
 
         merged_files = {}
-        for filename, result in validator_results.get('files', {}).items():
+        for filename, result in validator_results.get("files", {}).items():
             display_name, pair_id = filename_to_info.get(filename, (filename, filename))
             key = self._dedup_key(merged_files, display_name, pair_id)
-            result['file'] = display_name
-            result['pair_id'] = pair_id
+            result["file"] = display_name
+            result["pair_id"] = pair_id
             merged_files[key] = result
 
         for r in session.failed:
@@ -391,31 +427,33 @@ class DownloadAndCompareWorker(QThread):
             pair_id = r.pair.pair_id
             key = self._dedup_key(merged_files, display_name, pair_id)
             merged_files[key] = {
-                'status': 'download_failed',
-                'file': display_name,
-                'pair_id': pair_id,
-                'error': r.error,
-                'left_url': r.pair.left_url,
-                'right_url': r.pair.right_url,
-                'column_stats': {},
-                'summary': {},
+                "status": "download_failed",
+                "file": display_name,
+                "pair_id": pair_id,
+                "error": r.error,
+                "left_url": r.pair.left_url,
+                "right_url": r.pair.right_url,
+                "column_stats": {},
+                "summary": {},
             }
 
-        merged_files = dict(sorted(
-            merged_files.items(),
-            key=lambda kv: kv[1].get('pair_id', ''),
-        ))
+        merged_files = dict(
+            sorted(
+                merged_files.items(),
+                key=lambda kv: kv[1].get("pair_id", ""),
+            )
+        )
 
-        overall = dict(validator_results.get('overall', {}))
-        validation_failed = overall.get('failed', 0)
+        overall = dict(validator_results.get("overall", {}))
+        validation_failed = overall.get("failed", 0)
         download_failed = len(session.failed)
-        overall['total_pairs'] = len(session.pairs)
-        overall['validation_failed'] = validation_failed
-        overall['download_failed'] = download_failed
-        overall['total_failed'] = validation_failed + download_failed
+        overall["total_pairs"] = len(session.pairs)
+        overall["validation_failed"] = validation_failed
+        overall["download_failed"] = download_failed
+        overall["total_failed"] = validation_failed + download_failed
 
-        validator_results['files'] = merged_files
-        validator_results['overall'] = overall
+        validator_results["files"] = merged_files
+        validator_results["overall"] = overall
         return validator_results
 
     @staticmethod
@@ -430,12 +468,14 @@ class DownloadAndCompareWorker(QThread):
 # File-mode direct validation worker
 # ---------------------------------------------------------------------------
 
+
 class ValidationWorker(QThread):
     """QThread wrapper for File-mode direct validation (no download phase).
 
     Emits exactly one of ``results_ready`` / ``error`` / ``cancelled``.
     """
-    progress = Signal(object)        # ProgressUpdate
+
+    progress = Signal(object)  # ProgressUpdate
     results_ready = Signal(dict)
     error = Signal(str)
     cancelled = Signal()
@@ -457,17 +497,17 @@ class ValidationWorker(QThread):
             validator = FastBatchValidator(
                 self.folder1,
                 self.folder2,
-                sku_column=self.config.get('sku_column'),
-                compare_columns=self.config.get('compare_columns') or [],
-                file_pattern=self.config.get('file_filter'),
-                max_workers=self.config.get('workers', 4),
-                normalize_sku=self.config.get('normalize_sku', True),
-                case_sensitive=self.config.get('case_sensitive', True),
-                debug=self.config.get('debug', True),
-                auto_detect_sku=self.config.get('auto_detect', True),
-                priority_list=self.config.get('priority_list'),
-                exclude_keywords=self.config.get('exclude_keywords'),
-                export_diff=self.config.get('export_diff', True),
+                sku_column=self.config.get("sku_column"),
+                compare_columns=self.config.get("compare_columns") or [],
+                file_pattern=self.config.get("file_filter"),
+                max_workers=self.config.get("workers", 4),
+                normalize_sku=self.config.get("normalize_sku", True),
+                case_sensitive=self.config.get("case_sensitive", True),
+                debug=self.config.get("debug", True),
+                auto_detect_sku=self.config.get("auto_detect", True),
+                priority_list=self.config.get("priority_list"),
+                exclude_keywords=self.config.get("exclude_keywords"),
+                export_diff=self.config.get("export_diff", True),
             )
             results = validator.validate_all_parallel(
                 progress_callback=self.progress.emit,
@@ -481,17 +521,18 @@ class ValidationWorker(QThread):
                 self.cancelled.emit()
                 return
 
-            results['cleanup'] = validator.cleanup
+            results["cleanup"] = validator.cleanup
             # Name the two sides after their folders; without this every
             # result table falls back to "Value F1" / "Value F2".
-            results['site1_label'], results['site2_label'] = folder_labels(
+            results["site1_label"], results["site2_label"] = folder_labels(
                 self.folder1, self.folder2
             )
-            results['site1_path'] = self.folder1
-            results['site2_path'] = self.folder2
-            results['source'] = 'file'
-            results['diff_export_enabled'] = self.config.get('diff_export_enabled',
-                                                           True)
+            results["site1_path"] = self.folder1
+            results["site2_path"] = self.folder2
+            results["source"] = "file"
+            results["diff_export_enabled"] = self.config.get(
+                "diff_export_enabled", True
+            )
             self.results_ready.emit(results)
         except Exception as e:
             if validator is not None:

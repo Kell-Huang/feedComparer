@@ -1,4 +1,5 @@
 """Item delegates for painted table cells."""
+
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath
 from PySide6.QtWidgets import QStyledItemDelegate

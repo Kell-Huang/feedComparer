@@ -4,20 +4,29 @@ Visual styles are driven by ``styles/main.qss`` via ``setObjectName`` on each
 widget. The few inline styles kept here are for runtime state (e.g. list item
 height) that does not fit a static stylesheet.
 """
+
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMessageBox, QPushButton, QSizePolicy, QVBoxLayout,
+    QAbstractItemView,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
 )
 
 from core.logger import DebugLogger
 from core.reader import FileReader
 
 from .format import format_percent
-
 from .icons import make_pixmap
 
 
@@ -37,11 +46,12 @@ class ColumnSelectorDialog(QDialog):
     parsing and may block the UI for several seconds on very large inputs.
     """
 
-    def __init__(self, parent, file_path: str,
-                 currently_selected: Optional[List[str]] = None):
+    def __init__(
+        self, parent, file_path: str, currently_selected: Optional[List[str]] = None
+    ):
         super().__init__(parent)
         self.setObjectName("ColumnSelectorDialog")
-        self.setWindowTitle('Select Columns to Compare')
+        self.setWindowTitle("Select Columns to Compare")
         self.setMinimumSize(500, 550)
         self.selected_columns: List[str] = []
         self.currently_selected = currently_selected or []
@@ -128,9 +138,12 @@ class ColumnSelectorDialog(QDialog):
                     self._checked_state[col] = True
             self._populate_list(self.all_columns)
         except Exception as e:
-            show_message(self, "Cannot Read File",
-                         f"Failed to read the file:\n\n{str(e)}",
-                         QMessageBox.Critical)
+            show_message(
+                self,
+                "Cannot Read File",
+                f"Failed to read the file:\n\n{str(e)}",
+                QMessageBox.Critical,
+            )
             self.reject()
 
     def _populate_list(self, columns: List[str]) -> None:
@@ -181,8 +194,7 @@ class ColumnSelectorDialog(QDialog):
 
     def _apply_selection(self) -> None:
         self.selected_columns = [
-            col for col in self.all_columns
-            if self._checked_state.get(col, True)
+            col for col in self.all_columns if self._checked_state.get(col, True)
         ]
         self.accept()
 
@@ -242,7 +254,7 @@ class CompletionDialog(QDialog):
         report_path = summary_data.get("report_path")
         if report_path:
             info_text += f"<br><b>Report saved to:</b><br>{report_path}<br>"
-        info_text += "<br><i>Check the \"Debug Log\" tab for details.</i>"
+        info_text += '<br><i>Check the "Debug Log" tab for details.</i>'
 
         info_label = QLabel(info_text)
         info_label.setObjectName("infoLabel")
@@ -281,21 +293,22 @@ class MessageDialog(QDialog):
     _CONTENT_WIDTH = _WIDTH - 20 - 20 - 32 - 12
 
     _SEVERITY = {
-        'info': ('info', '#2f6fed'),
-        'warning': ('alert', '#b54708'),
-        'error': ('error', '#b42318'),
-        'question': ('question', '#2f6fed'),
+        "info": ("info", "#2f6fed"),
+        "warning": ("alert", "#b54708"),
+        "error": ("error", "#b42318"),
+        "question": ("question", "#2f6fed"),
     }
 
-    def __init__(self, parent, title: str, message: str,
-                 severity: str = 'info', buttons=None):
+    def __init__(
+        self, parent, title: str, message: str, severity: str = "info", buttons=None
+    ):
         super().__init__(parent)
         self.setObjectName("AppMessageDialog")
         self.setWindowTitle(title)
         self.setModal(True)
         self.choice = -1
 
-        glyph, colour = self._SEVERITY.get(severity, self._SEVERITY['info'])
+        glyph, colour = self._SEVERITY.get(severity, self._SEVERITY["info"])
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 18)
@@ -341,13 +354,12 @@ class MessageDialog(QDialog):
         button_row.setSpacing(8)
         button_row.addStretch()
         for index, (text, is_primary, is_default) in enumerate(
-                buttons or [('OK', True, True)]):
+            buttons or [("OK", True, True)]
+        ):
             button = QPushButton(text)
             button.setObjectName("dlgPrimaryBtn" if is_primary else "dlgSecondaryBtn")
             button.setAutoDefault(False)
-            button.clicked.connect(
-                lambda _checked=False, i=index: self._choose(i)
-            )
+            button.clicked.connect(lambda _checked=False, i=index: self._choose(i))
             if is_default:
                 button.setDefault(True)
             button_row.addWidget(button)
@@ -369,32 +381,38 @@ class MessageDialog(QDialog):
 
 
 _ICON_SEVERITY = {
-    QMessageBox.Information: 'info',
-    QMessageBox.Warning: 'warning',
-    QMessageBox.Critical: 'error',
-    QMessageBox.Question: 'question',
+    QMessageBox.Information: "info",
+    QMessageBox.Warning: "warning",
+    QMessageBox.Critical: "error",
+    QMessageBox.Question: "question",
 }
 
 
-def show_message(parent, title: str, message: str,
-                 icon: QMessageBox.Icon = QMessageBox.Information) -> int:
+def show_message(
+    parent, title: str, message: str, icon: QMessageBox.Icon = QMessageBox.Information
+) -> int:
     """Show a single-button message. Returns the dialog result code."""
     dialog = MessageDialog(
-        parent, title, message, _ICON_SEVERITY.get(icon, 'info'),
+        parent,
+        title,
+        message,
+        _ICON_SEVERITY.get(icon, "info"),
     )
     return dialog.exec()
 
 
-def show_question(parent, title: str, message: str,
-                  default_no: bool = True) -> bool:
+def show_question(parent, title: str, message: str, default_no: bool = True) -> bool:
     """Yes/No confirmation. Returns True only on an explicit Yes.
 
     Defaulting to No keeps a destructive action (replacing a hand-built
     pairing) from being confirmed by a stray Enter key.
     """
     dialog = MessageDialog(
-        parent, title, message, 'question',
-        [('No', False, default_no), ('Yes', True, not default_no)],
+        parent,
+        title,
+        message,
+        "question",
+        [("No", False, default_no), ("Yes", True, not default_no)],
     )
     dialog.exec()
     return dialog.choice == 1

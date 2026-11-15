@@ -6,16 +6,16 @@ display. The geometry assertions matter as much as the drag ones — a label
 that runs under a port is exactly the kind of defect a screenshot catches once
 and a test catches forever.
 """
+
 import os
 
-os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEvent, QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from ui.pairing_canvas import PairingCanvas
-
 
 _APP = None
 
@@ -32,8 +32,8 @@ def _canvas(links=None) -> PairingCanvas:
     canvas = PairingCanvas()
     canvas.resize(600, 200)
     canvas.set_model(
-        ['a.csv', 'b.csv', 'c.csv'],
-        ['x.csv', 'y.csv'],
+        ["a.csv", "b.csv", "c.csv"],
+        ["x.csv", "y.csv"],
         [(0, 0)] if links is None else links,
     )
     canvas.show()
@@ -47,8 +47,9 @@ def _centre(canvas: PairingCanvas, side: str, index: int) -> QPoint:
 
 def _drag(canvas: PairingCanvas, start: QPoint, end: QPoint) -> None:
     QTest.mousePress(canvas, Qt.LeftButton, Qt.NoModifier, start)
-    QTest.mouseMove(canvas, QPoint((start.x() + end.x()) // 2,
-                                  (start.y() + end.y()) // 2))
+    QTest.mouseMove(
+        canvas, QPoint((start.x() + end.x()) // 2, (start.y() + end.y()) // 2)
+    )
     QTest.mouseMove(canvas, end)
     QTest.mouseRelease(canvas, Qt.LeftButton, Qt.NoModifier, end)
     _app().processEvents()
@@ -58,27 +59,28 @@ def _drag(canvas: PairingCanvas, start: QPoint, end: QPoint) -> None:
 # Geometry
 # ----------------------------------------------------------------------
 
+
 def test_label_never_overlaps_the_port():
     """The file name must stay clear of the notch cut into the chip edge."""
     canvas = _canvas()
-    for side, count in (('left', 3), ('right', 2)):
+    for side, count in (("left", 3), ("right", 2)):
         for index in range(count):
             chip = canvas._chip_rect(side, index)
             port = canvas._port_rect(side, index)
             text = canvas._text_rect(side, index)
 
-            assert not text.intersects(port), f'{side} {index}: {text} vs {port}'
-            assert chip.contains(text), f'{side} {index}: {text} vs {chip}'
+            assert not text.intersects(port), f"{side} {index}: {text} vs {port}"
+            assert chip.contains(text), f"{side} {index}: {text} vs {chip}"
 
     canvas.close()
 
 
 def test_port_sits_on_the_edge_facing_the_links():
     canvas = _canvas()
-    left_chip = canvas._chip_rect('left', 0)
-    left_port = canvas._port_rect('left', 0)
-    right_chip = canvas._chip_rect('right', 0)
-    right_port = canvas._port_rect('right', 0)
+    left_chip = canvas._chip_rect("left", 0)
+    left_port = canvas._port_rect("left", 0)
+    right_chip = canvas._chip_rect("right", 0)
+    right_port = canvas._port_rect("right", 0)
 
     # Left chips connect on their right edge, right chips on their left edge.
     assert abs(left_port.right() - left_chip.right()) < 0.5
@@ -95,7 +97,7 @@ def test_height_follows_the_taller_column():
     rows = 3
     assert canvas.height() >= rows * 30
 
-    canvas.set_model(['only.csv'], ['one.csv', 'two.csv'], [])
+    canvas.set_model(["only.csv"], ["one.csv", "two.csv"], [])
     assert canvas.height() < 3 * 30 + 24
 
     canvas.close()
@@ -105,12 +107,13 @@ def test_height_follows_the_taller_column():
 # Dragging
 # ----------------------------------------------------------------------
 
+
 def test_drag_between_sides_creates_a_link():
     canvas = _canvas(links=[])
     seen = []
     canvas.links_changed.connect(seen.append)
 
-    _drag(canvas, _centre(canvas, 'left', 1), _centre(canvas, 'right', 1))
+    _drag(canvas, _centre(canvas, "left", 1), _centre(canvas, "right", 1))
 
     assert canvas.links() == [(1, 1)]
     assert seen[-1] == [(1, 1)]
@@ -120,21 +123,21 @@ def test_drag_between_sides_creates_a_link():
 
 def test_drag_onto_an_existing_link_removes_it():
     canvas = _canvas(links=[(0, 0)])
-    _drag(canvas, _centre(canvas, 'left', 0), _centre(canvas, 'right', 0))
+    _drag(canvas, _centre(canvas, "left", 0), _centre(canvas, "right", 0))
     assert canvas.links() == []
     canvas.close()
 
 
 def test_drag_within_one_side_changes_nothing():
     canvas = _canvas(links=[])
-    _drag(canvas, _centre(canvas, 'left', 0), _centre(canvas, 'left', 2))
+    _drag(canvas, _centre(canvas, "left", 0), _centre(canvas, "left", 2))
     assert canvas.links() == []
     canvas.close()
 
 
 def test_drag_released_over_empty_space_changes_nothing():
     canvas = _canvas(links=[])
-    _drag(canvas, _centre(canvas, 'left', 0), QPoint(300, 180))
+    _drag(canvas, _centre(canvas, "left", 0), QPoint(300, 180))
     assert canvas.links() == []
     canvas.close()
 
@@ -142,12 +145,10 @@ def test_drag_released_over_empty_space_changes_nothing():
 def test_click_then_click_connects_without_dragging():
     """Keyboard / trackpad fallback: two clicks on ports are a connection."""
     canvas = _canvas(links=[])
-    QTest.mouseClick(canvas, Qt.LeftButton, Qt.NoModifier,
-                     _centre(canvas, 'left', 2))
-    assert canvas._anchor == ('left', 2)
+    QTest.mouseClick(canvas, Qt.LeftButton, Qt.NoModifier, _centre(canvas, "left", 2))
+    assert canvas._anchor == ("left", 2)
 
-    QTest.mouseClick(canvas, Qt.LeftButton, Qt.NoModifier,
-                     _centre(canvas, 'right', 0))
+    QTest.mouseClick(canvas, Qt.LeftButton, Qt.NoModifier, _centre(canvas, "right", 0))
     assert canvas.links() == [(2, 0)]
     assert canvas._anchor is None
 
@@ -156,7 +157,7 @@ def test_click_then_click_connects_without_dragging():
 
 def test_clicking_the_same_port_twice_clears_the_anchor():
     canvas = _canvas(links=[])
-    port = _centre(canvas, 'left', 1)
+    port = _centre(canvas, "left", 1)
     QTest.mouseClick(canvas, Qt.LeftButton, Qt.NoModifier, port)
     QTest.mouseClick(canvas, Qt.LeftButton, Qt.NoModifier, port)
     assert canvas._anchor is None
@@ -166,8 +167,8 @@ def test_clicking_the_same_port_twice_clears_the_anchor():
 
 def test_clicking_a_link_removes_it():
     canvas = _canvas(links=[(0, 0)])
-    start = canvas._anchor_point('left', 0)
-    end = canvas._anchor_point('right', 0)
+    start = canvas._anchor_point("left", 0)
+    end = canvas._anchor_point("right", 0)
     midpoint = QPoint(int((start.x() + end.x()) / 2), int((start.y() + end.y()) / 2))
 
     QTest.mouseClick(canvas, Qt.LeftButton, Qt.NoModifier, midpoint)
@@ -179,8 +180,8 @@ def test_clicking_a_link_removes_it():
 def test_one_left_chip_can_hold_several_links():
     """1-to-many is expressed as several links from the same left node."""
     canvas = _canvas(links=[])
-    _drag(canvas, _centre(canvas, 'left', 0), _centre(canvas, 'right', 0))
-    _drag(canvas, _centre(canvas, 'left', 0), _centre(canvas, 'right', 1))
+    _drag(canvas, _centre(canvas, "left", 0), _centre(canvas, "right", 0))
+    _drag(canvas, _centre(canvas, "left", 0), _centre(canvas, "right", 1))
     assert canvas.links() == [(0, 0), (0, 1)]
     canvas.close()
 
@@ -188,7 +189,7 @@ def test_one_left_chip_can_hold_several_links():
 def test_locked_canvas_ignores_input():
     canvas = _canvas(links=[])
     canvas.set_locked(True)
-    _drag(canvas, _centre(canvas, 'left', 0), _centre(canvas, 'right', 0))
+    _drag(canvas, _centre(canvas, "left", 0), _centre(canvas, "right", 0))
     assert canvas.links() == []
     canvas.close()
 
@@ -197,10 +198,11 @@ def test_locked_canvas_ignores_input():
 # Animation
 # ----------------------------------------------------------------------
 
+
 def test_animation_timer_stops_once_everything_settles():
     """An idle canvas must not repaint 60 times a second."""
     canvas = _canvas(links=[])
-    _drag(canvas, _centre(canvas, 'left', 0), _centre(canvas, 'right', 0))
+    _drag(canvas, _centre(canvas, "left", 0), _centre(canvas, "right", 0))
     assert canvas._timer.isActive()
 
     QTest.qWait(700)
@@ -212,10 +214,10 @@ def test_animation_timer_stops_once_everything_settles():
 
 def test_status_colours_the_link_without_touching_the_model():
     canvas = _canvas(links=[(0, 0)])
-    canvas.set_pair_status(0, 'done', 1.0)
-    assert canvas._link_color((0, 0)) == '#0f7b3f'
-    canvas.set_pair_status(0, 'failed', 0.0)
-    assert canvas._link_color((0, 0)) == '#b42318'
+    canvas.set_pair_status(0, "done", 1.0)
+    assert canvas._link_color((0, 0)) == "#0f7b3f"
+    canvas.set_pair_status(0, "failed", 0.0)
+    assert canvas._link_color((0, 0)) == "#b42318"
     canvas.clear_pair_status()
     assert canvas.links() == [(0, 0)]
     canvas.close()
@@ -224,8 +226,8 @@ def test_status_colours_the_link_without_touching_the_model():
 def test_hovering_a_link_marks_it_and_offers_a_remove_hint():
     """Hovering a connector turns it red and shows the × that clicking applies."""
     canvas = _canvas(links=[(0, 0)])
-    start = canvas._anchor_point('left', 0)
-    end = canvas._anchor_point('right', 0)
+    start = canvas._anchor_point("left", 0)
+    end = canvas._anchor_point("right", 0)
     midpoint = QPoint(int((start.x() + end.x()) / 2), int((start.y() + end.y()) / 2))
 
     QTest.mouseMove(canvas, midpoint)

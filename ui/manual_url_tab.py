@@ -15,15 +15,26 @@ Deduplication matters here: the same URL pasted twice becomes one node, and
 one node may hold several links. That is how 1-to-many pairings are expressed,
 and the downloader already fetches each distinct URL once.
 """
+
 from pathlib import Path
 from typing import List, Tuple
 from urllib.parse import urlparse
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QButtonGroup, QGroupBox, QHeaderView, QHBoxLayout,
-    QLabel, QMessageBox, QPlainTextEdit, QPushButton, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget,
+    QAbstractItemView,
+    QButtonGroup,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 
 from core.models import DownloadPair
@@ -41,18 +52,17 @@ from .layout_utils import scrollable_container
 from .pair_status import PairTableStatus
 from .pairing_canvas import PairingCanvas
 
-
 _URL_EDIT_MIN_HEIGHT = 110
 _PAIR_TABLE_MIN_HEIGHT = 150
 _PAIR_ROW_HEIGHT = 30
 
 # Canvas state -> the palette keys used by the drawing code.
 _CANVAS_STATES = {
-    PAIR_PENDING: 'queued',
-    PAIR_DOWNLOADING: 'downloading',
-    PAIR_DONE: 'done',
-    PAIR_FAILED: 'failed',
-    PAIR_CANCELLED: 'failed',
+    PAIR_PENDING: "queued",
+    PAIR_DOWNLOADING: "downloading",
+    PAIR_DONE: "done",
+    PAIR_FAILED: "failed",
+    PAIR_CANCELLED: "failed",
 }
 
 
@@ -60,7 +70,7 @@ def _infer_name_from_url(url: str, fallback_index: int) -> str:
     """Infer a display name from a URL. Falls back to ``url_N`` if empty."""
     try:
         parsed = urlparse(url)
-        name = Path(parsed.path.rstrip('/')).name
+        name = Path(parsed.path.rstrip("/")).name
         if name:
             return name
     except Exception:
@@ -124,8 +134,7 @@ class ManualUrlTab(QWidget):
         self.url_left_edit.setObjectName("urlLeftEdit")
         self.url_left_edit.setMinimumHeight(_URL_EDIT_MIN_HEIGHT)
         self.url_left_edit.setPlaceholderText(
-            "https://example.com/feed_a.csv\n"
-            "https://example.com/feed_b.csv"
+            "https://example.com/feed_a.csv\n" "https://example.com/feed_b.csv"
         )
         self.url_left_edit.textChanged.connect(self._update_counts)
         left_side.addWidget(self.url_left_edit, stretch=1)
@@ -139,8 +148,7 @@ class ManualUrlTab(QWidget):
         self.url_right_edit.setObjectName("urlRightEdit")
         self.url_right_edit.setMinimumHeight(_URL_EDIT_MIN_HEIGHT)
         self.url_right_edit.setPlaceholderText(
-            "https://example.com/feed_a.csv\n"
-            "https://example.com/feed_b.csv"
+            "https://example.com/feed_a.csv\n" "https://example.com/feed_b.csv"
         )
         self.url_right_edit.textChanged.connect(self._update_counts)
         right_side.addWidget(self.url_right_edit, stretch=1)
@@ -180,7 +188,10 @@ class ManualUrlTab(QWidget):
         self.view_table_btn = QPushButton("Table")
         self._view_group = QButtonGroup(self)
         self._view_group.setExclusive(True)
-        for button, checked in ((self.view_map_btn, True), (self.view_table_btn, False)):
+        for button, checked in (
+            (self.view_map_btn, True),
+            (self.view_table_btn, False),
+        ):
             button.setObjectName("pairViewBtn")
             button.setCheckable(True)
             button.setChecked(checked)
@@ -192,7 +203,9 @@ class ManualUrlTab(QWidget):
         # Shown when the URL text no longer matches the map that was built from
         # it. The pairing is kept: silently discarding hand-made links because
         # the user edited a line would be worse than a stale map.
-        self.stale_label = QLabel("URL list changed — press Generate to rebuild the map.")
+        self.stale_label = QLabel(
+            "URL list changed — press Generate to rebuild the map."
+        )
         self.stale_label.setObjectName("staleLabel")
         self.stale_label.setVisible(False)
         view_row.addWidget(self.stale_label)
@@ -246,7 +259,7 @@ class ManualUrlTab(QWidget):
 
     @staticmethod
     def _parse_urls(text: str) -> List[str]:
-        return [line.strip() for line in text.split('\n') if line.strip()]
+        return [line.strip() for line in text.split("\n") if line.strip()]
 
     def _update_counts(self) -> None:
         left_urls = self._parse_urls(self.url_left_edit.toPlainText())
@@ -271,14 +284,16 @@ class ManualUrlTab(QWidget):
         right_urls = self._parse_urls(self.url_right_edit.toPlainText())
         if not left_urls or not right_urls:
             show_message(
-                self, "Empty Side",
+                self,
+                "Empty Side",
                 "Paste URLs on both sides before generating pairs.",
                 QMessageBox.Warning,
             )
             return
 
         if self._links and not show_question(
-            self, "Replace Pairing",
+            self,
+            "Replace Pairing",
             "Generating again replaces the current pairing, including any links "
             "you made by hand.\n\nContinue?",
         ):
@@ -298,18 +313,17 @@ class ManualUrlTab(QWidget):
         merged_right = len(right_urls) - len(right_nodes)
         if (len(left_urls) != len(right_urls)) or merged_left or merged_right:
             show_message(
-                self, "Count Mismatch",
-                self._mismatch_text(left_urls, right_urls, merged_left,
-                                    merged_right, count),
+                self,
+                "Count Mismatch",
+                self._mismatch_text(
+                    left_urls, right_urls, merged_left, merged_right, count
+                ),
                 QMessageBox.Information,
             )
 
     @staticmethod
-    def _mismatch_text(left_urls, right_urls, merged_left, merged_right,
-                       count) -> str:
-        parts = [
-            f"Site 1 has {len(left_urls)} URL(s), Site 2 has {len(right_urls)}."
-        ]
+    def _mismatch_text(left_urls, right_urls, merged_left, merged_right, count) -> str:
+        parts = [f"Site 1 has {len(left_urls)} URL(s), Site 2 has {len(right_urls)}."]
         merged = []
         if merged_left:
             merged.append(f"{merged_left} duplicate(s) on Site 1")
@@ -346,19 +360,25 @@ class ManualUrlTab(QWidget):
         for position, (left_index, right_index) in enumerate(self._links, start=1):
             left_url = self._left_nodes[left_index]
             right_url = self._right_nodes[right_index]
-            self._pairs.append(DownloadPair(
-                pair_id=f"pair_{position:04d}",
-                left_name=_infer_name_from_url(left_url, left_index + 1),
-                left_url=left_url,
-                right_name=_infer_name_from_url(right_url, right_index + 1),
-                right_url=right_url,
-            ))
+            self._pairs.append(
+                DownloadPair(
+                    pair_id=f"pair_{position:04d}",
+                    left_name=_infer_name_from_url(left_url, left_index + 1),
+                    left_url=left_url,
+                    right_name=_infer_name_from_url(right_url, right_index + 1),
+                    right_url=right_url,
+                )
+            )
 
         self.canvas.set_model(
-            [_infer_name_from_url(url, index + 1)
-             for index, url in enumerate(self._left_nodes)],
-            [_infer_name_from_url(url, index + 1)
-             for index, url in enumerate(self._right_nodes)],
+            [
+                _infer_name_from_url(url, index + 1)
+                for index, url in enumerate(self._left_nodes)
+            ],
+            [
+                _infer_name_from_url(url, index + 1)
+                for index, url in enumerate(self._right_nodes)
+            ],
             self._links,
         )
         # With nothing to show, the view switch would be a dead control.
@@ -421,17 +441,18 @@ class ManualUrlTab(QWidget):
             return None
         if not self._pairs:
             show_message(
-                self, "No Pairs",
+                self,
+                "No Pairs",
                 "Generate at least one pair before starting.",
                 QMessageBox.Warning,
             )
             return None
         return {
-            'mode': 'manual',
-            'pairs': list(self._pairs),
-            'site1_label': 'Manual Site 1',
-            'site2_label': 'Manual Site 2',
-            'config': self.config_widget.get_config(),
+            "mode": "manual",
+            "pairs": list(self._pairs),
+            "site1_label": "Manual Site 1",
+            "site2_label": "Manual Site 2",
+            "config": self.config_widget.get_config(),
         }
 
     def set_running(self, running: bool) -> None:
@@ -455,6 +476,6 @@ class ManualUrlTab(QWidget):
         self.pair_status.apply(status)
         self.canvas.set_pair_status(
             status.index,
-            _CANVAS_STATES.get(status.state, ''),
+            _CANVAS_STATES.get(status.state, ""),
             status.fraction,
         )

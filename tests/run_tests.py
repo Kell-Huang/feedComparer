@@ -10,24 +10,24 @@ The runner is deliberately dependency-free (no pytest needed) so the project
 can be verified with nothing but its runtime requirements installed. Every
 test module is also pytest-compatible if pytest is available.
 """
+
 import importlib
 import sys
 import time
 import traceback
 from pathlib import Path
 
-
 TESTS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = TESTS_DIR.parent
 
 SUITES = {
-    'core': 'test_core',
-    'progress': 'test_progress',
-    'downloader': 'test_downloader',
-    'ui': 'test_ui',
-    'canvas': 'test_pairing_canvas',
-    'flow': 'test_flow',
-    'scale': 'test_scale',
+    "core": "test_core",
+    "progress": "test_progress",
+    "downloader": "test_downloader",
+    "ui": "test_ui",
+    "canvas": "test_pairing_canvas",
+    "flow": "test_flow",
+    "scale": "test_scale",
 }
 
 
@@ -40,8 +40,9 @@ def _bootstrap_path():
 def _run_module(module_name: str):
     module = importlib.import_module(module_name)
     tests = [
-        (name, obj) for name, obj in vars(module).items()
-        if name.startswith('test_') and callable(obj)
+        (name, obj)
+        for name, obj in vars(module).items()
+        if name.startswith("test_") and callable(obj)
     ]
     tests.sort(key=lambda item: item[1].__code__.co_firstlineno)
 
@@ -90,5 +91,5 @@ def main(argv):
     return 0 if total_failed == 0 else 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv))

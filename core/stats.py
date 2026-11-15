@@ -40,12 +40,13 @@ to the Python equivalence rules. On real feeds the vast majority of cells are
 identical, so this removes the per-cell interpreter overhead that previously
 dominated runtime.
 """
+
 import csv
 import re
 import unicodedata
 from collections import defaultdict
-from functools import lru_cache
 from datetime import date, datetime
+from functools import lru_cache
 from typing import Dict, List
 
 import polars as pl
@@ -54,21 +55,21 @@ import polars as pl
 class ColumnMatchStats:
     """Column-level diff statistics."""
 
-    _THOUSANDS_RE = re.compile(r'^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$')
-    _SEP_DATE_FORMATS = ('%Y-%m-%d', '%Y/%m/%d')
-    _COMPACT_DATE_FORMAT = '%Y%m%d'
+    _THOUSANDS_RE = re.compile(r"^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$")
+    _SEP_DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d")
+    _COMPACT_DATE_FORMAT = "%Y%m%d"
     # Every accepted format starts with a four-digit year. `%Y` matches
     # exactly four digits, so this shape check is not an approximation: it
     # rejects precisely the strings strptime would reject anyway.
-    _DATE_SHAPE_RE = re.compile(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}')
-    _COMPACT_DATE_RE = re.compile(r'^\d{8}$')
+    _DATE_SHAPE_RE = re.compile(r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}")
+    _COMPACT_DATE_RE = re.compile(r"^\d{8}$")
     _ISO_DATETIME_FORMATS = (
-        '%Y-%m-%d %H:%M:%S',
-        '%Y-%m-%d %H:%M:%S.%f',
-        '%Y-%m-%dT%H:%M:%S',
-        '%Y-%m-%dT%H:%M:%S.%f',
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f",
     )
-    _NANOSECOND_RE = re.compile(r'(\.\d{6})\d+')
+    _NANOSECOND_RE = re.compile(r"(\.\d{6})\d+")
     # Rows per write. Chunking is what keeps the peak memory flat when a
     # column differs on every row: one chunk is built, written, and dropped
     # instead of holding every diff row of the feed in memory.
@@ -81,7 +82,7 @@ class ColumnMatchStats:
             return True
         if isinstance(val, float) and val != val:  # NaN without numpy
             return True
-        if val == '':
+        if val == "":
             return True
         return False
 
@@ -92,16 +93,16 @@ class ColumnMatchStats:
             return val
         if isinstance(val, str):
             s = val.strip().lower()
-            if s == 'true':
+            if s == "true":
                 return True
-            if s == 'false':
+            if s == "false":
                 return False
         return None
 
     @staticmethod
     def _normalize_nanos(s: str) -> str:
         """Truncate fractional seconds beyond 6 digits (microseconds)."""
-        return ColumnMatchStats._NANOSECOND_RE.sub(r'\1', s)
+        return ColumnMatchStats._NANOSECOND_RE.sub(r"\1", s)
 
     @staticmethod
     def _to_datetime(val, allow_compact: bool):
@@ -134,8 +135,7 @@ class ColumnMatchStats:
         """
         if ColumnMatchStats._DATE_SHAPE_RE.match(s):
             return True
-        return bool(allow_compact
-                    and ColumnMatchStats._COMPACT_DATE_RE.match(s))
+        return bool(allow_compact and ColumnMatchStats._COMPACT_DATE_RE.match(s))
 
     @staticmethod
     @lru_cache(maxsize=4096)
@@ -177,8 +177,8 @@ class ColumnMatchStats:
             s1 = str(v1)
             s2 = str(v2)
             if not s1.isascii() or not s2.isascii():
-                n1 = float(unicodedata.normalize('NFKC', s1).strip())
-                n2 = float(unicodedata.normalize('NFKC', s2).strip())
+                n1 = float(unicodedata.normalize("NFKC", s1).strip())
+                n2 = float(unicodedata.normalize("NFKC", s2).strip())
                 return n1 == n2
         except (ValueError, TypeError):
             pass
@@ -187,10 +187,16 @@ class ColumnMatchStats:
         try:
             s1_raw = str(v1).strip()
             s2_raw = str(v2).strip()
-            s1_clean = (s1_raw.replace(',', '')
-                        if ColumnMatchStats._THOUSANDS_RE.match(s1_raw) else s1_raw)
-            s2_clean = (s2_raw.replace(',', '')
-                        if ColumnMatchStats._THOUSANDS_RE.match(s2_raw) else s2_raw)
+            s1_clean = (
+                s1_raw.replace(",", "")
+                if ColumnMatchStats._THOUSANDS_RE.match(s1_raw)
+                else s1_raw
+            )
+            s2_clean = (
+                s2_raw.replace(",", "")
+                if ColumnMatchStats._THOUSANDS_RE.match(s2_raw)
+                else s2_raw
+            )
             if s1_clean != s1_raw or s2_clean != s2_raw:
                 return float(s1_clean) == float(s2_clean)
         except (ValueError, TypeError):
@@ -226,7 +232,7 @@ class ColumnMatchStats:
         """Boolean mask of values that count as empty."""
         dtype = series.dtype
         if dtype == pl.String:
-            return series.is_null() | (series == '')
+            return series.is_null() | (series == "")
         if dtype.is_float():
             return series.is_null() | series.is_nan()
         return series.is_null()
@@ -244,15 +250,23 @@ class ColumnMatchStats:
         Python spelling rather than silently changing it.
         """
         if series.dtype == pl.Boolean:
-            return (series.cast(pl.String, strict=False)
-                    .str.replace_all("true", "True")
-                    .str.replace_all("false", "False"))
+            return (
+                series.cast(pl.String, strict=False)
+                .str.replace_all("true", "True")
+                .str.replace_all("false", "False")
+            )
         return series.cast(pl.String, strict=False).fill_null("")
 
     @staticmethod
-    def _diff_frame(df1_common: pl.DataFrame, s1: pl.Series, s2: pl.Series,
-                    e1: pl.Series, e2: pl.Series, column: str,
-                    chunk: List[int]) -> pl.DataFrame:
+    def _diff_frame(
+        df1_common: pl.DataFrame,
+        s1: pl.Series,
+        s2: pl.Series,
+        e1: pl.Series,
+        e2: pl.Series,
+        column: str,
+        chunk: List[int],
+    ) -> pl.DataFrame:
         """One chunk of diff rows, built with gathers so Polars does the rest.
 
         The old loop ran ``str()`` three times per differing cell and handed
@@ -261,27 +275,45 @@ class ColumnMatchStats:
         """
         mask1 = e1.gather(chunk)
         mask2 = e2.gather(chunk)
-        frame = pl.DataFrame({
-            "sku": (df1_common["_sku_norm"].gather(chunk)
-                    .cast(pl.String, strict=False).fill_null("")),
-            "value_file1": ColumnMatchStats._as_text(s1.gather(chunk)),
-            "value_file2": ColumnMatchStats._as_text(s2.gather(chunk)),
-        })
-        return frame.with_columns([
-            pl.when(mask1 & ~mask2).then(pl.lit("EMPTY"))
-            .otherwise(pl.col("value_file1")).alias("value_file1"),
-            pl.when(mask2 & ~mask1).then(pl.lit("EMPTY"))
-            .otherwise(pl.col("value_file2")).alias("value_file2"),
-            pl.lit(column, dtype=pl.String).alias("column"),
-        ]).select(["sku", "column", "value_file1", "value_file2"])
+        frame = pl.DataFrame(
+            {
+                "sku": (
+                    df1_common["_sku_norm"]
+                    .gather(chunk)
+                    .cast(pl.String, strict=False)
+                    .fill_null("")
+                ),
+                "value_file1": ColumnMatchStats._as_text(s1.gather(chunk)),
+                "value_file2": ColumnMatchStats._as_text(s2.gather(chunk)),
+            }
+        )
+        return frame.with_columns(
+            [
+                pl.when(mask1 & ~mask2)
+                .then(pl.lit("EMPTY"))
+                .otherwise(pl.col("value_file1"))
+                .alias("value_file1"),
+                pl.when(mask2 & ~mask1)
+                .then(pl.lit("EMPTY"))
+                .otherwise(pl.col("value_file2"))
+                .alias("value_file2"),
+                pl.lit(column, dtype=pl.String).alias("column"),
+            ]
+        ).select(["sku", "column", "value_file1", "value_file2"])
 
     # ------------------------------------------------------------------
     # Entry point
     # ------------------------------------------------------------------
 
     @staticmethod
-    def calculate(df1_common: pl.DataFrame, df2_common: pl.DataFrame, sku_col1, sku_col2,
-                  compare_cols: List[str], diff_csv_path: str) -> Dict:
+    def calculate(
+        df1_common: pl.DataFrame,
+        df2_common: pl.DataFrame,
+        sku_col1,
+        sku_col2,
+        compare_cols: List[str],
+        diff_csv_path: str,
+    ) -> Dict:
         """Compare columns and stream differences to a CSV file.
 
         Precondition: df1_common and df2_common are row-aligned on _sku_norm
@@ -298,14 +330,18 @@ class ColumnMatchStats:
 
         # The diff file is optional: with no path, the comparison still runs
         # and every counter is still produced, only nothing is written.
-        stream = open(diff_csv_path, 'wb') if diff_csv_path else None
+        stream = open(diff_csv_path, "wb") if diff_csv_path else None
         if stream is not None:
             # The header goes in up front, so a file with no differences still
             # has one — the export is read by people, not just by this code.
             ColumnMatchStats._diff_frame(
-                df1_common, df1_common['_sku_norm'], df1_common['_sku_norm'],
-                pl.Series([], dtype=pl.Boolean), pl.Series([], dtype=pl.Boolean),
-                '', [],
+                df1_common,
+                df1_common["_sku_norm"],
+                df1_common["_sku_norm"],
+                pl.Series([], dtype=pl.Boolean),
+                pl.Series([], dtype=pl.Boolean),
+                "",
+                [],
             ).write_csv(stream, include_header=True, include_bom=True)
         try:
             for col in compare_cols:
@@ -322,8 +358,8 @@ class ColumnMatchStats:
                 only1 = e1 & ~e2
                 only2 = ~e1 & e2
 
-                t1 = s1.cast(pl.String, strict=False).fill_null('')
-                t2 = s2.cast(pl.String, strict=False).fill_null('')
+                t1 = s1.cast(pl.String, strict=False).fill_null("")
+                t2 = s2.cast(pl.String, strict=False).fill_null("")
 
                 # Tier one: cells that are non-empty and textually identical
                 # are exact matches without any Python involvement.
@@ -358,35 +394,40 @@ class ColumnMatchStats:
                 only2_idx = only2.arg_true().to_list()
                 if stream is not None and (only1_idx or only2_idx or failing):
                     mismatch_idx = sorted(set(only1_idx) | set(only2_idx) | failing)
-                    for start in range(0, len(mismatch_idx),
-                                       ColumnMatchStats._WRITE_CHUNK_ROWS):
-                        chunk = mismatch_idx[start:start
-                                             + ColumnMatchStats._WRITE_CHUNK_ROWS]
+                    for start in range(
+                        0, len(mismatch_idx), ColumnMatchStats._WRITE_CHUNK_ROWS
+                    ):
+                        chunk = mismatch_idx[
+                            start : start + ColumnMatchStats._WRITE_CHUNK_ROWS
+                        ]
                         frame = ColumnMatchStats._diff_frame(
-                            df1_common, s1, s2, e1, e2, col, chunk)
+                            df1_common, s1, s2, e1, e2, col, chunk
+                        )
                         frame.write_csv(stream, include_header=False)
 
-                match_rate = (exact_matches / total_compared * 100) if total_compared > 0 else 0
+                match_rate = (
+                    (exact_matches / total_compared * 100) if total_compared > 0 else 0
+                )
                 if match_rate == 100:
-                    status = 'PERFECT'
+                    status = "PERFECT"
                 elif match_rate >= 95:
-                    status = 'GOOD'
+                    status = "GOOD"
                 elif match_rate >= 80:
-                    status = 'FAIR'
+                    status = "FAIR"
                 elif match_rate >= 50:
-                    status = 'POOR'
+                    status = "POOR"
                 else:
-                    status = 'BAD'
+                    status = "BAD"
 
                 stats[col] = {
-                    'total_compared': total_compared,
-                    'exact_matches': exact_matches,
-                    'mismatches': mismatches,
-                    'both_nan': both_nan,
-                    'only_file1_nan': only1_count,
-                    'only_file2_nan': only2_count,
-                    'match_rate': round(match_rate, 2),
-                    'status': status,
+                    "total_compared": total_compared,
+                    "exact_matches": exact_matches,
+                    "mismatches": mismatches,
+                    "both_nan": both_nan,
+                    "only_file1_nan": only1_count,
+                    "only_file2_nan": only2_count,
+                    "match_rate": round(match_rate, 2),
+                    "status": status,
                 }
         finally:
             if stream is not None:
@@ -395,33 +436,41 @@ class ColumnMatchStats:
 
     @staticmethod
     def calculate_overall(all_column_stats):
-        overall = defaultdict(lambda: {
-            'total_compared': 0, 'exact_matches': 0, 'mismatches': 0,
-            'both_nan': 0, 'only_file1_nan': 0, 'only_file2_nan': 0,
-            'file_count': 0,
-        })
+        overall = defaultdict(
+            lambda: {
+                "total_compared": 0,
+                "exact_matches": 0,
+                "mismatches": 0,
+                "both_nan": 0,
+                "only_file1_nan": 0,
+                "only_file2_nan": 0,
+                "file_count": 0,
+            }
+        )
         for file_stats in all_column_stats:
             for col, stats in file_stats.items():
-                overall[col]['total_compared'] += stats['total_compared']
-                overall[col]['exact_matches'] += stats['exact_matches']
-                overall[col]['mismatches'] += stats['mismatches']
-                overall[col]['both_nan'] += stats.get('both_nan', 0)
-                overall[col]['only_file1_nan'] += stats.get('only_file1_nan', 0)
-                overall[col]['only_file2_nan'] += stats.get('only_file2_nan', 0)
-                overall[col]['file_count'] += 1
+                overall[col]["total_compared"] += stats["total_compared"]
+                overall[col]["exact_matches"] += stats["exact_matches"]
+                overall[col]["mismatches"] += stats["mismatches"]
+                overall[col]["both_nan"] += stats.get("both_nan", 0)
+                overall[col]["only_file1_nan"] += stats.get("only_file1_nan", 0)
+                overall[col]["only_file2_nan"] += stats.get("only_file2_nan", 0)
+                overall[col]["file_count"] += 1
         for col in overall:
-            total = overall[col]['total_compared']
-            matches = overall[col]['exact_matches']
-            overall[col]['match_rate'] = round(matches / total * 100, 2) if total > 0 else 0
-            rate = overall[col]['match_rate']
+            total = overall[col]["total_compared"]
+            matches = overall[col]["exact_matches"]
+            overall[col]["match_rate"] = (
+                round(matches / total * 100, 2) if total > 0 else 0
+            )
+            rate = overall[col]["match_rate"]
             if rate == 100:
-                overall[col]['status'] = 'PERFECT'
+                overall[col]["status"] = "PERFECT"
             elif rate >= 95:
-                overall[col]['status'] = 'GOOD'
+                overall[col]["status"] = "GOOD"
             elif rate >= 80:
-                overall[col]['status'] = 'FAIR'
+                overall[col]["status"] = "FAIR"
             elif rate >= 50:
-                overall[col]['status'] = 'POOR'
+                overall[col]["status"] = "POOR"
             else:
-                overall[col]['status'] = 'BAD'
+                overall[col]["status"] = "BAD"
         return dict(overall)

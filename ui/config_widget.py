@@ -10,22 +10,33 @@ absorbed the whole stretch of its column and rendered as a very wide box. The
 bottom row is now an HBox with an explicit stretch, which keeps every control
 at its natural width regardless of window size.
 """
+
 from typing import List, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFileDialog, QGridLayout, QGroupBox,
-    QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QSpinBox,
-    QVBoxLayout, QWidget,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .dialogs import ColumnSelectorDialog
 
-
-FILE_FILTER_OPTIONS = ['All supported', '*.csv', '*.xlsx', '*.xml', '*.zip']
+FILE_FILTER_OPTIONS = ["All supported", "*.csv", "*.xlsx", "*.xml", "*.zip"]
 FILE_DIALOG_FILTER = (
-    'All Supported (*.csv *.xlsx *.xls *.xml *.zip);;'
-    'CSV (*.csv);;Excel (*.xlsx *.xls);;XML (*.xml);;ZIP (*.zip)'
+    "All Supported (*.csv *.xlsx *.xls *.xml *.zip);;"
+    "CSV (*.csv);;Excel (*.xlsx *.xls);;XML (*.xml);;ZIP (*.zip)"
 )
 
 
@@ -91,7 +102,7 @@ class ComparisonConfigWidget(QWidget):
         self.exclude_edit.setPlaceholderText(
             "Comma separated keywords; any column whose name contains one is skipped"
         )
-        self.exclude_edit.setText(', '.join(self._default_exclude))
+        self.exclude_edit.setText(", ".join(self._default_exclude))
         self.exclude_edit.setToolTip(
             "Matching is case-insensitive and substring based.\n"
             "Default excludes stock/price columns; clear the field to compare everything."
@@ -163,20 +174,25 @@ class ComparisonConfigWidget(QWidget):
 
     def _on_select_from_file(self) -> None:
         current = self.cols_edit.text().strip()
-        currently_selected = [c.strip() for c in current.split(',') if c.strip()] if current else []
+        currently_selected = (
+            [c.strip() for c in current.split(",") if c.strip()] if current else []
+        )
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select a sample file", "", FILE_DIALOG_FILTER,
+            self,
+            "Select a sample file",
+            "",
+            FILE_DIALOG_FILTER,
         )
         if not file_path:
             return
         dialog = ColumnSelectorDialog(self, file_path, currently_selected)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             selected = dialog.get_selected_columns()
-            self.cols_edit.setText(', '.join(selected))
+            self.cols_edit.setText(", ".join(selected))
 
     def _current_file_filter(self) -> Optional[str]:
         text = self.filter_combo.currentText()
-        if text == 'All supported':
+        if text == "All supported":
             return None
         return text
 
@@ -184,12 +200,12 @@ class ComparisonConfigWidget(QWidget):
         raw = self.priority_edit.toPlainText().strip()
         if not raw:
             return None
-        items = [line.strip() for line in raw.split('\n') if line.strip()]
+        items = [line.strip() for line in raw.split("\n") if line.strip()]
         return items or None
 
     @staticmethod
     def _split_csv_field(raw: str) -> List[str]:
-        return [c.strip() for c in raw.split(',') if c.strip()]
+        return [c.strip() for c in raw.split(",") if c.strip()]
 
     def _compare_columns(self) -> List[str]:
         return self._split_csv_field(self.cols_edit.text().strip())
@@ -200,25 +216,32 @@ class ComparisonConfigWidget(QWidget):
     def get_config(self) -> dict:
         """Return a fresh config dict. Values are snapshotted at call time."""
         return {
-            'sku_column': self.sku_edit.text().strip() or None,
-            'compare_columns': self._compare_columns(),
-            'normalize_sku': self.normalize_check.isChecked(),
-            'case_sensitive': self.case_check.isChecked(),
-            'debug': self.debug_check.isChecked(),
-            'export_diff': self.export_diff_check.isChecked(),
-            'auto_detect': self.auto_detect_check.isChecked(),
-            'priority_list': self._priority_list(),
-            'exclude_keywords': self._exclude_keywords(),
-            'workers': self.workers_spin.value(),
-            'file_filter': self._current_file_filter(),
+            "sku_column": self.sku_edit.text().strip() or None,
+            "compare_columns": self._compare_columns(),
+            "normalize_sku": self.normalize_check.isChecked(),
+            "case_sensitive": self.case_check.isChecked(),
+            "debug": self.debug_check.isChecked(),
+            "export_diff": self.export_diff_check.isChecked(),
+            "auto_detect": self.auto_detect_check.isChecked(),
+            "priority_list": self._priority_list(),
+            "exclude_keywords": self._exclude_keywords(),
+            "workers": self.workers_spin.value(),
+            "file_filter": self._current_file_filter(),
         }
 
     def set_running(self, running: bool) -> None:
         """Disable every input while a run is in flight."""
         for widget in (
-            self.sku_edit, self.priority_edit, self.cols_edit, self.exclude_edit,
-            self.auto_detect_check, self.normalize_check, self.case_check,
-            self.debug_check, self.export_diff_check, self.workers_spin,
+            self.sku_edit,
+            self.priority_edit,
+            self.cols_edit,
+            self.exclude_edit,
+            self.auto_detect_check,
+            self.normalize_check,
+            self.case_check,
+            self.debug_check,
+            self.export_diff_check,
+            self.workers_spin,
             self.filter_combo,
             self.select_cols_btn,
         ):

@@ -8,15 +8,29 @@ Interactive-state contract: all mutating controls (project/site selectors,
 channel lists, pair operations) are gated through ``_refresh_interactive_state``
 so a running comparison or in-flight fetch cannot race against UI edits.
 """
+
 import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QGridLayout, QGroupBox, QHeaderView,
-    QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
-    QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QAbstractItemView,
+    QComboBox,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 
 from core.models import DownloadPair
@@ -27,11 +41,10 @@ from .layout_utils import scrollable_container
 from .pair_status import PairTableStatus
 from .workers import FetchChannelsWorker, FetchProjectsWorker, FetchSitesWorker
 
-
 # Match a trailing locale suffix of 2-3 letters (case-insensitive), optionally
 # before an extension. ``{2,3}`` trades a small false-positive risk (e.g.
 # ``_new``) for wider coverage; auto-fill is a convenience, users can adjust.
-_LOCALE_SUFFIX_RE = re.compile(r'(_[a-zA-Z]{2,3})+(\.[^.]+)?$')
+_LOCALE_SUFFIX_RE = re.compile(r"(_[a-zA-Z]{2,3})+(\.[^.]+)?$")
 
 _CHANNEL_LIST_MIN_HEIGHT = 110
 _PAIR_TABLE_MIN_HEIGHT = 150
@@ -42,7 +55,7 @@ def _base_name(channel_name: str) -> str:
     """Strip trailing locale suffixes so feed_A_en.csv and feed_A_de.csv match."""
     stem = Path(channel_name).stem
     ext = Path(channel_name).suffix
-    stripped = _LOCALE_SUFFIX_RE.sub('', stem)
+    stripped = _LOCALE_SUFFIX_RE.sub("", stem)
     if not stripped:
         stripped = stem
     return stripped + ext
@@ -58,10 +71,17 @@ class ApiModeTab(QWidget):
          'site2_label': str,
          'config': dict}
     """
+
     log = Signal(str)
 
-    def __init__(self, base_url: str, headers: dict, verify_ssl: bool,
-                 exclude_keywords=None, parent=None):
+    def __init__(
+        self,
+        base_url: str,
+        headers: dict,
+        verify_ssl: bool,
+        exclude_keywords=None,
+        parent=None,
+    ):
         super().__init__(parent)
         self.setObjectName("ApiModeTab")
         self._base_url = base_url
@@ -177,7 +197,9 @@ class ApiModeTab(QWidget):
 
         self.clear_pairs_btn = QPushButton("Clear All")
         self.clear_pairs_btn.setObjectName("clearPairsBtn")
-        self.clear_pairs_btn.clicked.connect(lambda checked=False: self._on_clear_pairs())
+        self.clear_pairs_btn.clicked.connect(
+            lambda checked=False: self._on_clear_pairs()
+        )
         pair_ops.addWidget(self.clear_pairs_btn)
 
         pair_ops.addStretch()
@@ -215,7 +237,9 @@ class ApiModeTab(QWidget):
         layout.addWidget(pair_group)
 
         # Shared config
-        self.config_widget = ComparisonConfigWidget(exclude_keywords=self._exclude_keywords)
+        self.config_widget = ComparisonConfigWidget(
+            exclude_keywords=self._exclude_keywords
+        )
         self.config_widget.show_file_filter(False)
         layout.addWidget(self.config_widget)
 
@@ -310,7 +334,9 @@ class ApiModeTab(QWidget):
         if self._is_running:
             return
         self._worker_projects = FetchProjectsWorker(
-            self._base_url, self._headers, self._verify_ssl,
+            self._base_url,
+            self._headers,
+            self._verify_ssl,
         )
         self._worker_projects.log.connect(self.log.emit)
         self._worker_projects.data_ready.connect(self._on_projects_received)
@@ -323,7 +349,7 @@ class ApiModeTab(QWidget):
         self._projects = projects
         self.project_combo.clear()
         for p in projects:
-            self.project_combo.addItem(f"{p['name']} (ID: {p['id']})", p['id'])
+            self.project_combo.addItem(f"{p['name']} (ID: {p['id']})", p["id"])
         self._refresh_interactive_state()
 
     def _on_worker_error(self, message: str) -> None:
@@ -340,12 +366,18 @@ class ApiModeTab(QWidget):
         project_id = self.project_combo.currentData()
         if not project_id:
             show_message(
-                self, "No Project", "Select a project first.", QMessageBox.Warning,
+                self,
+                "No Project",
+                "Select a project first.",
+                QMessageBox.Warning,
             )
             return
         worker = FetchSitesWorker(
-            self._base_url, self._headers, project_id,
-            only_active=False, verify_ssl=self._verify_ssl,
+            self._base_url,
+            self._headers,
+            project_id,
+            only_active=False,
+            verify_ssl=self._verify_ssl,
         )
         worker.log.connect(self.log.emit)
         worker.data_ready.connect(
@@ -369,8 +401,9 @@ class ApiModeTab(QWidget):
             self._populate_site_combo(self.site2_combo, sites, "")
         self._refresh_interactive_state()
 
-    def _populate_site_combo(self, combo: QComboBox, sites: List[dict],
-                             filter_text: str) -> None:
+    def _populate_site_combo(
+        self, combo: QComboBox, sites: List[dict], filter_text: str
+    ) -> None:
         # Preserve the current selection across a filter keystroke, otherwise
         # typing in the search box silently resets the chosen site.
         previous = combo.currentData()
@@ -379,12 +412,12 @@ class ApiModeTab(QWidget):
         needle = filter_text.strip().lower()
         restore_index = -1
         for s in sites:
-            name = s['name']
-            sid = str(s['id'])
+            name = s["name"]
+            sid = str(s["id"])
             if needle and needle not in name.lower() and needle not in sid:
                 continue
-            combo.addItem(f"{name} (ID: {sid})", s['id'])
-            if s['id'] == previous:
+            combo.addItem(f"{name} (ID: {sid})", s["id"])
+            if s["id"] == previous:
                 restore_index = combo.count() - 1
         if restore_index >= 0:
             combo.setCurrentIndex(restore_index)
@@ -407,7 +440,8 @@ class ApiModeTab(QWidget):
         site2_id = self.site2_combo.currentData()
         if not site1_id or not site2_id:
             show_message(
-                self, "No Sites",
+                self,
+                "No Sites",
                 "Select both sites before fetching channels.",
                 QMessageBox.Warning,
             )
@@ -427,7 +461,10 @@ class ApiModeTab(QWidget):
         self._refresh_interactive_state()
 
         w1 = FetchChannelsWorker(
-            self._base_url, self._headers, site1_id, verify_ssl=self._verify_ssl,
+            self._base_url,
+            self._headers,
+            site1_id,
+            verify_ssl=self._verify_ssl,
         )
         w1.log.connect(self.log.emit)
         w1.data_ready.connect(lambda ch: self._on_channels_received(ch, 1))
@@ -435,7 +472,10 @@ class ApiModeTab(QWidget):
         w1.finished.connect(w1.deleteLater)
 
         w2 = FetchChannelsWorker(
-            self._base_url, self._headers, site2_id, verify_ssl=self._verify_ssl,
+            self._base_url,
+            self._headers,
+            site2_id,
+            verify_ssl=self._verify_ssl,
         )
         w2.log.connect(self.log.emit)
         w2.data_ready.connect(lambda ch: self._on_channels_received(ch, 2))
@@ -468,12 +508,13 @@ class ApiModeTab(QWidget):
         self._pending_channel_fetches = max(0, self._pending_channel_fetches - 1)
         self._refresh_interactive_state()
 
-    def _populate_channel_list(self, list_widget: QListWidget,
-                               channels: List[dict]) -> None:
+    def _populate_channel_list(
+        self, list_widget: QListWidget, channels: List[dict]
+    ) -> None:
         list_widget.clear()
         for ch in channels:
             item = QListWidgetItem()
-            item.setText(ch['name'])
+            item.setText(ch["name"])
             item.setData(Qt.UserRole, ch)
             list_widget.addItem(item)
 
@@ -488,16 +529,18 @@ class ApiModeTab(QWidget):
         right_item = self.channel_list2.currentItem()
         if not left_item or not right_item:
             show_message(
-                self, "No Selection",
+                self,
+                "No Selection",
                 "Select one channel from each list first.",
                 QMessageBox.Warning,
             )
             return
         left_ch = left_item.data(Qt.UserRole)
         right_ch = right_item.data(Qt.UserRole)
-        if not left_ch.get('link') or not right_ch.get('link'):
+        if not left_ch.get("link") or not right_ch.get("link"):
             show_message(
-                self, "Missing URL",
+                self,
+                "Missing URL",
                 "One of the selected channels has no downloadable URL.",
                 QMessageBox.Warning,
             )
@@ -509,13 +552,15 @@ class ApiModeTab(QWidget):
         # from len(self._pairs) produced duplicates as soon as a row was
         # deleted from the middle of the list.
         self._pair_seq += 1
-        self._pairs.append(DownloadPair(
-            pair_id=f"pair_{self._pair_seq:04d}",
-            left_name=left_ch['name'],
-            left_url=left_ch['link'],
-            right_name=right_ch['name'],
-            right_url=right_ch['link'],
-        ))
+        self._pairs.append(
+            DownloadPair(
+                pair_id=f"pair_{self._pair_seq:04d}",
+                left_name=left_ch["name"],
+                left_url=left_ch["link"],
+                right_name=right_ch["name"],
+                right_url=right_ch["link"],
+            )
+        )
         self._render_pairs()
 
     def _on_auto_fill(self) -> None:
@@ -523,29 +568,31 @@ class ApiModeTab(QWidget):
             return
         if not self._channels1 or not self._channels2:
             show_message(
-                self, "No Channels",
+                self,
+                "No Channels",
                 "Fetch channels for both sites before auto-filling.",
                 QMessageBox.Warning,
             )
             return
         right_by_base: Dict[str, dict] = {}
         for ch in self._channels2:
-            key = _base_name(ch['name'])
+            key = _base_name(ch["name"])
             if key not in right_by_base:
                 right_by_base[key] = ch
         added = 0
         for ch1 in self._channels1:
-            key = _base_name(ch1['name'])
+            key = _base_name(ch1["name"])
             ch2 = right_by_base.get(key)
             if not ch2:
                 continue
-            if not ch1.get('link') or not ch2.get('link'):
+            if not ch1.get("link") or not ch2.get("link"):
                 continue
             self._append_pair(ch1, ch2)
             added += 1
         if added == 0:
             show_message(
-                self, "No Matches",
+                self,
+                "No Matches",
                 "No channels share the same base name across sites.",
                 QMessageBox.Information,
             )
@@ -605,7 +652,8 @@ class ApiModeTab(QWidget):
             return None
         if not self._pairs:
             show_message(
-                self, "No Pairs",
+                self,
+                "No Pairs",
                 "Add at least one pair before starting.",
                 QMessageBox.Warning,
             )
@@ -613,11 +661,11 @@ class ApiModeTab(QWidget):
         site1_label = self.site1_combo.currentText().split(" (ID:")[0] or "Site 1"
         site2_label = self.site2_combo.currentText().split(" (ID:")[0] or "Site 2"
         return {
-            'mode': 'api',
-            'pairs': list(self._pairs),
-            'site1_label': site1_label,
-            'site2_label': site2_label,
-            'config': self.config_widget.get_config(),
+            "mode": "api",
+            "pairs": list(self._pairs),
+            "site1_label": site1_label,
+            "site2_label": site2_label,
+            "config": self.config_widget.get_config(),
         }
 
     def set_running(self, running: bool) -> None:

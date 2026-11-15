@@ -24,29 +24,29 @@ Numeric canonicalization rules (mirrored exactly by the vectorized path):
   - ``"12.50"``  -> ``"12.50"``   (non-integral decimals are preserved)
   - ``"1.2.3"``  -> ``"1.2.3"``   (not a valid number, untouched)
 """
+
 import math
 import re
 import unicodedata
 
 import polars as pl
 
-
 # Applied by the reference implementation, in this order.
-_EXOTIC_SPACES = ('\u00A0', '\u2007', '\u202F')
-_EXOTIC_DASHES = ('\u2013', '\u2014', '\u2015')
-_CONTROL_RE = re.compile(r'[\t\n\r\f\v]')
-_WHITESPACE_RE = re.compile(r'\s+')
+_EXOTIC_SPACES = ("\u00a0", "\u2007", "\u202f")
+_EXOTIC_DASHES = ("\u2013", "\u2014", "\u2015")
+_CONTROL_RE = re.compile(r"[\t\n\r\f\v]")
+_WHITESPACE_RE = re.compile(r"\s+")
 
 # Vectorized equivalents. ``[0-9]`` (not ``\d``) keeps the numeric rules
 # ASCII-only; Rust's ``\d`` is Unicode-aware and would otherwise swallow
 # full-width digits before the NFKC fallback could see them.
-_CONTROL_PATTERN = r'[\t\n\r\f\v]'
-_WHITESPACE_PATTERN = r'\s+'
-_NON_ASCII_PATTERN = r'[^\x00-\x7F]'
+_CONTROL_PATTERN = r"[\t\n\r\f\v]"
+_WHITESPACE_PATTERN = r"\s+"
+_NON_ASCII_PATTERN = r"[^\x00-\x7F]"
 
-_DECIMAL_ZERO_PATTERN = r'^(?<sign>-?)(?<num>[0-9]+)\.(?<zeros>0*)$'
-_INTEGER_PATTERN = r'^(?<sign>-?)(?<num>[0-9]+)$'
-_LEADING_ZEROS_PATTERN = r'^0+'
+_DECIMAL_ZERO_PATTERN = r"^(?<sign>-?)(?<num>[0-9]+)\.(?<zeros>0*)$"
+_INTEGER_PATTERN = r"^(?<sign>-?)(?<num>[0-9]+)$"
+_LEADING_ZEROS_PATTERN = r"^0+"
 
 
 class SKUNormalizer:
@@ -56,24 +56,24 @@ class SKUNormalizer:
 
     def normalize(self, sku) -> str:
         if sku is None:
-            return ''
+            return ""
         if isinstance(sku, float) and math.isnan(sku):
-            return ''
+            return ""
         s = str(sku).strip()
-        s = unicodedata.normalize('NFKC', s)
+        s = unicodedata.normalize("NFKC", s)
         # Collapse exotic space characters into a plain space.
         for c in _EXOTIC_SPACES:
-            s = s.replace(c, ' ')
+            s = s.replace(c, " ")
         # Collapse exotic dash characters into an ASCII hyphen.
         for c in _EXOTIC_DASHES:
-            s = s.replace(c, '-')
-        s = _CONTROL_RE.sub('', s)
-        s = _WHITESPACE_RE.sub(' ', s)
+            s = s.replace(c, "-")
+        s = _CONTROL_RE.sub("", s)
+        s = _WHITESPACE_RE.sub(" ", s)
         # Canonicalize numeric-like SKUs (e.g. "0012.0" -> "12").
-        cleaned = s.replace('.', '').replace('-', '').replace(' ', '')
+        cleaned = s.replace(".", "").replace("-", "").replace(" ", "")
         if cleaned.isdigit() and len(cleaned) > 1:
             try:
-                if '.' in s:
+                if "." in s:
                     num = float(s)
                     if num == int(num):
                         s = str(int(num))
@@ -91,15 +91,15 @@ class SKUNormalizer:
         name = series.name
         if series.dtype != pl.String:
             series = series.cast(pl.String, strict=False)
-        s = series.fill_null('')
+        s = series.fill_null("")
 
         # Whitespace cleanup. Rust's ``\s`` is Unicode-aware, so NBSP and the
         # other exotic spaces collapse to ' ' here exactly as they do in the
         # reference implementation.
         out = (
             s.str.strip_chars()
-            .str.replace_all(_CONTROL_PATTERN, '')
-            .str.replace_all(_WHITESPACE_PATTERN, ' ')
+            .str.replace_all(_CONTROL_PATTERN, "")
+            .str.replace_all(_WHITESPACE_PATTERN, " ")
         )
 
         # The numeric rules are Expr-based, so evaluate them and materialize
@@ -127,24 +127,26 @@ class SKUNormalizer:
         # "cleaned value must be longer than one character" rule the
         # reference implementation uses.
         decimal = col.str.extract_groups(_DECIMAL_ZERO_PATTERN)
-        dec_num = decimal.struct.field('num')
-        dec_zeros = decimal.struct.field('zeros')
-        decimal_applies = (
-            (dec_num.str.len_chars() + dec_zeros.str.len_chars()) > 1
+        dec_num = decimal.struct.field("num")
+        dec_zeros = decimal.struct.field("zeros")
+        decimal_applies = (dec_num.str.len_chars() + dec_zeros.str.len_chars()) > 1
+        decimal_result = pl.concat_str(
+            [
+                decimal.struct.field("sign"),
+                dec_num.str.replace(_LEADING_ZEROS_PATTERN, ""),
+            ]
         )
-        decimal_result = pl.concat_str([
-            decimal.struct.field('sign'),
-            dec_num.str.replace(_LEADING_ZEROS_PATTERN, ''),
-        ])
 
         # "0012" -> "12". Only when more than one digit is present.
         integer = col.str.extract_groups(_INTEGER_PATTERN)
-        int_num = integer.struct.field('num')
+        int_num = integer.struct.field("num")
         integer_applies = int_num.str.len_chars() > 1
-        integer_result = pl.concat_str([
-            integer.struct.field('sign'),
-            int_num.str.replace(_LEADING_ZEROS_PATTERN, ''),
-        ])
+        integer_result = pl.concat_str(
+            [
+                integer.struct.field("sign"),
+                int_num.str.replace(_LEADING_ZEROS_PATTERN, ""),
+            ]
+        )
 
         decimal_applies = decimal_applies.fill_null(False)
         integer_applies = integer_applies.fill_null(False)
@@ -160,8 +162,4 @@ class SKUNormalizer:
         # All-zero inputs strip down to an empty string; the reference
         # implementation yields "0" for those. Guard on ``applied`` so a
         # genuinely empty SKU stays empty instead of becoming "0".
-        return (
-            pl.when(applied & (result == ''))
-            .then(pl.lit('0'))
-            .otherwise(result)
-        )
+        return pl.when(applied & (result == "")).then(pl.lit("0")).otherwise(result)

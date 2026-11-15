@@ -13,6 +13,7 @@ The ICO is written by hand rather than through an image library: Vista and
 later accept PNG-compressed entries, so the container is just a header plus
 one directory entry per size. That keeps the build free of Pillow.
 """
+
 import struct
 import sys
 from pathlib import Path
@@ -20,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from PySide6.QtCore import QByteArray, QBuffer, QIODevice, Qt
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt
 from PySide6.QtGui import QGuiApplication, QImage, QPainter
 from PySide6.QtSvg import QSvgRenderer
 
@@ -63,7 +64,15 @@ def build_ico(entries) -> bytes:
     for size, data in entries:
         # 256 is encoded as 0: the width/height fields are single bytes.
         directory += struct.pack(
-            "<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32, len(data), offset,
+            "<BBBBHHII",
+            size % 256,
+            size % 256,
+            0,
+            0,
+            1,
+            32,
+            len(data),
+            offset,
         )
         payload += data
         offset += len(data)
@@ -81,8 +90,10 @@ def main() -> int:
     ICO_PATH.write_bytes(build_ico(entries))
     render(svg, 256).save(str(PNG_PATH), "PNG")
 
-    print(f"wrote {ICO_PATH.relative_to(ROOT)} "
-          f"({ICO_PATH.stat().st_size:,} bytes, sizes {', '.join(map(str, SIZES))})")
+    print(
+        f"wrote {ICO_PATH.relative_to(ROOT)} "
+        f"({ICO_PATH.stat().st_size:,} bytes, sizes {', '.join(map(str, SIZES))})"
+    )
     print(f"wrote {PNG_PATH.relative_to(ROOT)}")
     return 0
 

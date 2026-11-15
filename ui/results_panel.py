@@ -27,6 +27,7 @@ allocates a huge document and blocks the UI thread, so the log view is capped
 at ``MAX_LOG_LINES`` with an explicit "truncated" banner. The full log is
 always present in the exported report.
 """
+
 import csv
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -34,21 +35,23 @@ from typing import List, Optional, Tuple
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QLabel,
-    QPlainTextEdit, QTabWidget, QTableWidget, QTableWidgetItem, QTextBrowser,
-    QVBoxLayout, QWidget,
+    QAbstractItemView,
+    QComboBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QPlainTextEdit,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QTextBrowser,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .delegates import BadgeDelegate
 from .format import format_percent
-from .theme import (
-    DANGER,
-    SUCCESS,
-    TEXT_SECONDARY,
-    WARNING,
-    status_style,
-)
-
+from .theme import DANGER, SUCCESS, TEXT_SECONDARY, WARNING, status_style
 
 DIFF_PREVIEW_LIMIT = 100
 MAX_CELL_TEXT = 80
@@ -85,7 +88,7 @@ def _number_cell(text: str, alignment=RIGHT) -> QTableWidgetItem:
 
 def _elide(text: str, limit: int) -> str:
     """Trim to ``limit`` characters, marking the cut with an ellipsis."""
-    return text if len(text) <= limit else text[: limit - 1] + '…'
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 class ResultsPanel(QWidget):
@@ -153,10 +156,19 @@ class ResultsPanel(QWidget):
         self.column_table.setObjectName("ColumnTable")
         # Header wording: "Status" was vague next to a quality badge, and
         # "Matches/Mismatches/Total" read as the same thing three times.
-        self.column_table.setHorizontalHeaderLabels([
-            'Column', 'Quality', 'Match %', 'Matched', 'Different',
-            'Compared', 'Empty (both)', 'Empty (one side)', 'In Pairs',
-        ])
+        self.column_table.setHorizontalHeaderLabels(
+            [
+                "Column",
+                "Quality",
+                "Match %",
+                "Matched",
+                "Different",
+                "Compared",
+                "Empty (both)",
+                "Empty (one side)",
+                "In Pairs",
+            ]
+        )
         self._configure_table(self.column_table, stretch_column=0)
         # "100.00%" needs more room than the content-driven sizing gave it on
         # a table whose other columns are short.
@@ -192,11 +204,20 @@ class ResultsPanel(QWidget):
         # These two columns hold SKUs present on one side only. "Miss F2"
         # read as "F2 is missing"; "File 1 only" states which side the SKUs
         # are on, and keeps the header order matching the data order.
-        self.file_table.setHorizontalHeaderLabels([
-            'File', 'Pair', 'Status', 'SKU Column / Error',
-            'Rows 1', 'Rows 2', 'Common', 'Differences',
-            'File 1 only', 'File 2 only',
-        ])
+        self.file_table.setHorizontalHeaderLabels(
+            [
+                "File",
+                "Pair",
+                "Status",
+                "SKU Column / Error",
+                "Rows 1",
+                "Rows 2",
+                "Common",
+                "Differences",
+                "File 1 only",
+                "File 2 only",
+            ]
+        )
         self._configure_table(self.file_table, stretch_column=0)
         self.tabs.addTab(self.file_table, "Files")
 
@@ -214,7 +235,7 @@ class ResultsPanel(QWidget):
         self.diff_table = QTableWidget(0, 5)
         self.diff_table.setObjectName("DiffTable")
         self.diff_table.setHorizontalHeaderLabels(
-            ['SKU', 'Column', 'Value F1', 'Value F2', 'Pair']
+            ["SKU", "Column", "Value F1", "Value F2", "Pair"]
         )
         self._configure_table(self.diff_table, stretch_column=2)
         header = self.diff_table.horizontalHeader()
@@ -291,7 +312,7 @@ class ResultsPanel(QWidget):
         self.file_table.setRowCount(0)
         self.diff_table.setRowCount(0)
         self.diff_table.setHorizontalHeaderLabels(
-            ['SKU', 'Column', 'Value F1', 'Value F2', 'Pair']
+            ["SKU", "Column", "Value F1", "Value F2", "Pair"]
         )
         self.tabs.setCurrentIndex(TAB_SUMMARY)
         self.tabs.setVisible(False)
@@ -304,8 +325,7 @@ class ResultsPanel(QWidget):
         self.summary_text.setPlainText(
             "The run completed but the results could not be rendered.\n\n"
             "This is a UI bug. The Debug Log tab holds the traceback, and the "
-            "exported report still contains the full data.\n\n"
-            + traceback_text
+            "exported report still contains the full data.\n\n" + traceback_text
         )
         self.log_text.setPlainText(traceback_text)
         self.tabs.setCurrentIndex(TAB_SUMMARY)
@@ -334,32 +354,32 @@ class ResultsPanel(QWidget):
     # ------------------------------------------------------------------
 
     def _render_summary(self, results: dict) -> None:
-        overall = results.get('overall', {})
-        total_pairs = overall.get('total_pairs', 0)
-        success = overall.get('success', 0)
-        skipped = overall.get('skipped', 0)
-        validation_failed = overall.get('validation_failed', overall.get('failed', 0))
-        download_failed = overall.get('download_failed', 0)
-        total_skus = overall.get('total_skus', 0)
-        total_diffs = overall.get('total_diffs', 0)
-        total_missing = overall.get('total_missing', 0)
-        avg_rate = overall.get('avg_match_rate', 0)
+        overall = results.get("overall", {})
+        total_pairs = overall.get("total_pairs", 0)
+        success = overall.get("success", 0)
+        skipped = overall.get("skipped", 0)
+        validation_failed = overall.get("validation_failed", overall.get("failed", 0))
+        download_failed = overall.get("download_failed", 0)
+        total_skus = overall.get("total_skus", 0)
+        total_diffs = overall.get("total_diffs", 0)
+        total_missing = overall.get("total_missing", 0)
+        avg_rate = overall.get("avg_match_rate", 0)
 
-        source = results.get('source', 'file')
-        site1 = results.get('site1_label', '') or '—'
-        site2 = results.get('site2_label', '') or '—'
+        source = results.get("source", "file")
+        site1 = results.get("site1_label", "") or "—"
+        site2 = results.get("site2_label", "") or "—"
         mode_label = {
-            'file': 'File Mode',
-            'api': 'API Mode',
-            'manual': 'Manual URL Mode',
+            "file": "File Mode",
+            "api": "API Mode",
+            "manual": "Manual URL Mode",
         }.get(source, source)
 
         def kv(label, value):
             return (
-                '<tr>'
+                "<tr>"
                 '<td style="color:#667085; padding:3px 24px 3px 0;">{}</td>'
                 '<td style="color:#1f2937; padding:3px 0;"><b>{}</b></td>'
-                '</tr>'
+                "</tr>"
             ).format(label, value)
 
         parts = [
@@ -367,44 +387,44 @@ class ResultsPanel(QWidget):
             '<p style="color:#1f2937; font-size:15px; font-weight:600; '
             'margin:0 0 12px 0;">VALIDATION SUMMARY</p>',
             '<table cellspacing="0" cellpadding="0">',
-            kv('Mode', mode_label),
+            kv("Mode", mode_label),
         ]
-        if source == 'file':
+        if source == "file":
             # Name the folders: "Site 1 / Site 2" is meaningless in file mode,
             # and without labels the reader cannot tell the sides apart.
-            if site1 != '—':
-                parts.append(kv('Baseline folder', site1))
-            if site2 != '—':
-                parts.append(kv('Comparison folder', site2))
-        elif source in ('api', 'manual'):
-            parts.append(kv('Site 1', site1))
-            parts.append(kv('Site 2', site2))
-        parts.append('</table>')
+            if site1 != "—":
+                parts.append(kv("Baseline folder", site1))
+            if site2 != "—":
+                parts.append(kv("Comparison folder", site2))
+        elif source in ("api", "manual"):
+            parts.append(kv("Site 1", site1))
+            parts.append(kv("Site 2", site2))
+        parts.append("</table>")
 
         parts.append(
             '<p style="margin:14px 0 4px 0; color:#1f2937;">'
-            f'{total_pairs} pairs · {success} compared · {skipped} skipped · '
-            f'{download_failed} download failed · '
-            f'{validation_failed} validation failed</p>'
+            f"{total_pairs} pairs · {success} compared · {skipped} skipped · "
+            f"{download_failed} download failed · "
+            f"{validation_failed} validation failed</p>"
         )
 
         parts.append('<table cellspacing="0" cellpadding="0" style="margin-top:10px;">')
-        parts.append(kv('Common SKUs compared', f'{total_skus:,}'))
-        parts.append(kv('Differences found', f'{total_diffs:,}'))
-        parts.append(kv('Missing SKUs', f'{total_missing:,}'))
-        parts.append(kv('Overall match rate', format_percent(avg_rate)))
-        parts.append('</table>')
+        parts.append(kv("Common SKUs compared", f"{total_skus:,}"))
+        parts.append(kv("Differences found", f"{total_diffs:,}"))
+        parts.append(kv("Missing SKUs", f"{total_missing:,}"))
+        parts.append(kv("Overall match rate", format_percent(avg_rate)))
+        parts.append("</table>")
 
         parts.append(
             '<p style="margin-top:18px; color:#98a2b3; font-size:12px;">'
-            'Column Match Rates has the per-column detail; Files has per-pair '
-            'results and errors.</p>'
+            "Column Match Rates has the per-column detail; Files has per-pair "
+            "results and errors.</p>"
         )
-        parts.append('</div>')
-        self.summary_text.setHtml(''.join(parts))
+        parts.append("</div>")
+        self.summary_text.setHtml("".join(parts))
 
     def _render_column_rates(self, results: dict) -> None:
-        overall_stats = results.get('overall_column_stats', {})
+        overall_stats = results.get("overall_column_stats", {})
         if not isinstance(overall_stats, dict):
             overall_stats = {}
 
@@ -421,9 +441,10 @@ class ResultsPanel(QWidget):
             self.rate_scope_combo.setEnabled(False)
             self.rate_caption.clear()
             self._show_empty_message(
-                self.column_table, 9,
+                self.column_table,
+                9,
                 "No columns compared. All pairs may have failed to download "
-                "or share no common columns."
+                "or share no common columns.",
             )
             return
 
@@ -432,11 +453,11 @@ class ResultsPanel(QWidget):
 
     def _build_rate_scopes(self, results: dict, overall_stats: dict) -> None:
         """Fill the scope picker: the aggregate first, then one row per pair."""
-        files = results.get('files', {}) or {}
+        files = results.get("files", {}) or {}
         per_pair = [
             (name, result)
             for name, result in sorted(files.items())
-            if result.get('status') == 'success' and result.get('column_stats')
+            if result.get("status") == "success" and result.get("column_stats")
         ]
 
         scopes: List[Tuple[str, dict, str]] = []
@@ -444,17 +465,21 @@ class ResultsPanel(QWidget):
             count = len(per_pair)
             caption = (
                 f"Aggregated across {count} pair{'' if count == 1 else 's'}"
-                if count else "Aggregated across all pairs"
+                if count
+                else "Aggregated across all pairs"
             )
-            scopes.append(('All pairs', overall_stats, caption))
+            scopes.append(("All pairs", overall_stats, caption))
 
         for name, result in per_pair:
-            stats = result['column_stats']
+            stats = result["column_stats"]
             columns = len(stats)
-            scopes.append((
-                name, stats,
-                f"{columns} column{'' if columns == 1 else 's'} compared in this pair",
-            ))
+            scopes.append(
+                (
+                    name,
+                    stats,
+                    f"{columns} column{'' if columns == 1 else 's'} compared in this pair",
+                )
+            )
 
         self._rate_scopes = scopes
         combo = self.rate_scope_combo
@@ -477,7 +502,7 @@ class ResultsPanel(QWidget):
         label, stats_by_col, caption = self._rate_scopes[index]
         # Index 0 is the aggregate; every other entry is a single pair, where
         # a "Pairs" count is always 1 and would just be noise.
-        is_aggregate = index == 0 and label == 'All pairs'
+        is_aggregate = index == 0 and label == "All pairs"
 
         self.rate_caption.setText(caption)
         self.rate_caption.setToolTip(caption)
@@ -491,13 +516,15 @@ class ResultsPanel(QWidget):
         self.column_table.clearSpans()
         sorted_cols = sorted(
             stats_by_col.items(),
-            key=lambda kv: kv[1].get('match_rate', 0),
+            key=lambda kv: kv[1].get("match_rate", 0),
         )
         self.column_table.setRowCount(len(sorted_cols))
 
         for row, (col, stats) in enumerate(sorted_cols):
-            rate = stats.get('match_rate', 0)
-            label_text, background, foreground = status_style(stats.get('status', 'BAD'))
+            rate = stats.get("match_rate", 0)
+            label_text, background, foreground = status_style(
+                stats.get("status", "BAD")
+            )
 
             self.column_table.setItem(row, 0, QTableWidgetItem(col))
 
@@ -515,14 +542,22 @@ class ResultsPanel(QWidget):
             rate_item.setFont(_bold(self.column_table.font()))
             self.column_table.setItem(row, 2, rate_item)
 
-            self.column_table.setItem(row, 3, _number_cell(f"{stats.get('exact_matches', 0):,}"))
-            self.column_table.setItem(row, 4, _number_cell(f"{stats.get('mismatches', 0):,}"))
-            self.column_table.setItem(row, 5, _number_cell(f"{stats.get('total_compared', 0):,}"))
-            self.column_table.setItem(row, 6, _number_cell(f"{stats.get('both_nan', 0):,}"))
-            one_side = stats.get('only_file1_nan', 0) + stats.get('only_file2_nan', 0)
+            self.column_table.setItem(
+                row, 3, _number_cell(f"{stats.get('exact_matches', 0):,}")
+            )
+            self.column_table.setItem(
+                row, 4, _number_cell(f"{stats.get('mismatches', 0):,}")
+            )
+            self.column_table.setItem(
+                row, 5, _number_cell(f"{stats.get('total_compared', 0):,}")
+            )
+            self.column_table.setItem(
+                row, 6, _number_cell(f"{stats.get('both_nan', 0):,}")
+            )
+            one_side = stats.get("only_file1_nan", 0) + stats.get("only_file2_nan", 0)
             self.column_table.setItem(row, 7, _number_cell(f"{one_side:,}"))
 
-            file_count = stats.get('file_count', 1)
+            file_count = stats.get("file_count", 1)
             pairs_item = _number_cell(f"{file_count:,}")
             pairs_item.setToolTip(f"Column present in {file_count} pair(s)")
             self.column_table.setItem(row, 8, pairs_item)
@@ -530,13 +565,13 @@ class ResultsPanel(QWidget):
     def _render_logs(self, results: dict) -> None:
         lines: List[str] = []
 
-        api_lines = results.get('api_log_lines') or []
+        api_lines = results.get("api_log_lines") or []
         if api_lines:
             lines.extend(["=" * 110, "API LOG", "=" * 110, ""])
             lines.extend(api_lines)
             lines.append("")
 
-        debug_logs = results.get('debug_logs') or []
+        debug_logs = results.get("debug_logs") or []
         lines.extend(["=" * 110, "DEBUG LOG", "=" * 110, ""])
 
         shown = debug_logs
@@ -546,12 +581,12 @@ class ResultsPanel(QWidget):
             truncated = True
 
         for entry in shown:
-            time_str = entry.get('time', '')
-            category = entry.get('category', '')
-            file_name = entry.get('file', '')
-            message = entry.get('message', '')
+            time_str = entry.get("time", "")
+            category = entry.get("category", "")
+            file_name = entry.get("file", "")
+            message = entry.get("message", "")
             if len(file_name) > 38:
-                file_name = file_name[:35] + '...'
+                file_name = file_name[:35] + "..."
             lines.append(f"{time_str:<14s} [{category:<6s}] {file_name:<40s} {message}")
 
         if truncated:
@@ -564,15 +599,15 @@ class ResultsPanel(QWidget):
 
         lines.append("")
         lines.append("=" * 110)
-        log_summary = results.get('log_summary', {})
+        log_summary = results.get("log_summary", {})
         if log_summary:
             lines.append(f"LOG SUMMARY: {log_summary}")
         lines.append("=" * 110)
 
-        self.log_text.setPlainText('\n'.join(lines))
+        self.log_text.setPlainText("\n".join(lines))
 
     def _render_sku_log(self, results: dict) -> None:
-        sku_log = results.get('sku_detection_log', [])
+        sku_log = results.get("sku_detection_log", [])
         if sku_log:
             shown = sku_log[:MAX_LOG_LINES]
             lines = ["=" * 80, "SKU COLUMN DETECTION LOG", "=" * 80, ""] + list(shown)
@@ -580,24 +615,26 @@ class ResultsPanel(QWidget):
                 lines.append(
                     f"... {len(sku_log) - MAX_LOG_LINES:,} more entries not shown."
                 )
-            self.sku_log_text.setPlainText('\n'.join(lines))
+            self.sku_log_text.setPlainText("\n".join(lines))
         else:
             self.sku_log_text.setPlainText("(no SKU detection entries)")
 
     def _render_files(self, results: dict) -> None:
-        files = results.get('files', {})
+        files = results.get("files", {})
         self.file_table.clearSpans()
 
         if not files:
             self._show_empty_message(
-                self.file_table, 10,
+                self.file_table,
+                10,
                 "No files were processed. This usually means every pair "
-                "failed to download."
+                "failed to download.",
             )
             return
 
-        self._align_headers(self.file_table,
-                            {0: LEFT, 1: LEFT, **{c: RIGHT for c in range(4, 10)}})
+        self._align_headers(
+            self.file_table, {0: LEFT, 1: LEFT, **{c: RIGHT for c in range(4, 10)}}
+        )
         self.file_table.setRowCount(len(files))
 
         for row, (display_name, result) in enumerate(files.items()):
@@ -605,78 +642,90 @@ class ResultsPanel(QWidget):
             name_item.setToolTip(display_name)
             self.file_table.setItem(row, 0, name_item)
 
-            pair_item = QTableWidgetItem(result.get('pair_id', ''))
+            pair_item = QTableWidgetItem(result.get("pair_id", ""))
             pair_item.setForeground(QColor(TEXT_SECONDARY))
             self.file_table.setItem(row, 1, pair_item)
 
-            status = result.get('status', 'error')
-            if status == 'success':
-                status_item = QTableWidgetItem('Compared')
+            status = result.get("status", "error")
+            if status == "success":
+                status_item = QTableWidgetItem("Compared")
                 status_item.setForeground(QColor(SUCCESS))
                 status_item.setFont(_bold(self.file_table.font()))
                 self.file_table.setItem(row, 2, status_item)
 
-                sku_col1 = result.get('sku_col1', '') or ''
-                sku_col2 = result.get('sku_col2', '') or ''
-                sku_info = sku_col1 if sku_col1 == sku_col2 else f"{sku_col1} / {sku_col2}"
+                sku_col1 = result.get("sku_col1", "") or ""
+                sku_col2 = result.get("sku_col2", "") or ""
+                sku_info = (
+                    sku_col1 if sku_col1 == sku_col2 else f"{sku_col1} / {sku_col2}"
+                )
                 self.file_table.setItem(row, 3, QTableWidgetItem(sku_info))
 
-                s = result.get('summary', {})
-                self.file_table.setItem(row, 4, _number_cell(f"{s.get('rows_file1', 0):,}"))
-                self.file_table.setItem(row, 5, _number_cell(f"{s.get('rows_file2', 0):,}"))
-                self.file_table.setItem(row, 6, _number_cell(f"{s.get('common_skus', 0):,}"))
+                s = result.get("summary", {})
+                self.file_table.setItem(
+                    row, 4, _number_cell(f"{s.get('rows_file1', 0):,}")
+                )
+                self.file_table.setItem(
+                    row, 5, _number_cell(f"{s.get('rows_file2', 0):,}")
+                )
+                self.file_table.setItem(
+                    row, 6, _number_cell(f"{s.get('common_skus', 0):,}")
+                )
 
-                diffs = s.get('total_differences', 0)
+                diffs = s.get("total_differences", 0)
                 diff_item = _number_cell(f"{diffs:,}")
                 if diffs > 0:
                     diff_item.setForeground(QColor(DANGER))
                     diff_item.setFont(_bold(self.file_table.font()))
                 self.file_table.setItem(row, 7, diff_item)
 
-                self.file_table.setItem(row, 8, _number_cell(f"{s.get('only_in_file1', 0):,}"))
-                self.file_table.setItem(row, 9, _number_cell(f"{s.get('only_in_file2', 0):,}"))
+                self.file_table.setItem(
+                    row, 8, _number_cell(f"{s.get('only_in_file1', 0):,}")
+                )
+                self.file_table.setItem(
+                    row, 9, _number_cell(f"{s.get('only_in_file2', 0):,}")
+                )
 
-                diff_path = result.get('diff_csv_path')
+                diff_path = result.get("diff_csv_path")
                 if diff_path and Path(diff_path).exists():
                     self._diff_csv_paths.append((display_name, diff_path))
 
-            elif status == 'skipped':
-                status_item = QTableWidgetItem('Skipped')
+            elif status == "skipped":
+                status_item = QTableWidgetItem("Skipped")
                 status_item.setForeground(QColor(WARNING))
                 self.file_table.setItem(row, 2, status_item)
-                reason = result.get('reason', '')
+                reason = result.get("reason", "")
                 reason_item = QTableWidgetItem(reason[:MAX_CELL_TEXT])
                 if len(reason) > MAX_CELL_TEXT:
                     reason_item.setToolTip(reason)
                 self.file_table.setItem(row, 3, reason_item)
 
-            elif status == 'download_failed':
-                status_item = QTableWidgetItem('Download Failed')
+            elif status == "download_failed":
+                status_item = QTableWidgetItem("Download Failed")
                 status_item.setForeground(QColor(DANGER))
                 status_item.setFont(_bold(self.file_table.font()))
                 self.file_table.setItem(row, 2, status_item)
-                error = result.get('error', '')
+                error = result.get("error", "")
                 err_item = QTableWidgetItem(error[:MAX_CELL_TEXT])
                 err_item.setToolTip(error)
                 self.file_table.setItem(row, 3, err_item)
 
             else:  # 'error'
-                status_item = QTableWidgetItem('Failed')
+                status_item = QTableWidgetItem("Failed")
                 status_item.setForeground(QColor(DANGER))
                 status_item.setFont(_bold(self.file_table.font()))
                 self.file_table.setItem(row, 2, status_item)
-                error = result.get('error', '')
+                error = result.get("error", "")
                 err_item = QTableWidgetItem(error[:MAX_CELL_TEXT])
                 err_item.setToolTip(error)
                 self.file_table.setItem(row, 3, err_item)
 
     def _render_diffs(self, results: dict) -> None:
-        site1_label = results.get('site1_label', '') or 'Value F1'
-        site2_label = results.get('site2_label', '') or 'Value F2'
-        site1_path = results.get('site1_path', '') or ''
-        site2_path = results.get('site2_path', '') or ''
+        site1_label = results.get("site1_label", "") or "Value F1"
+        site2_label = results.get("site2_label", "") or "Value F2"
+        site1_path = results.get("site1_path", "") or ""
+        site2_path = results.get("site2_path", "") or ""
         self.diff_table.setHorizontalHeaderLabels(
-            ['SKU', 'Column', site1_label, site2_label, 'Pair']
+            ["SKU", "Column", site1_label, site2_label, "Pair"]
         )
         self.diff_table.clearSpans()
 
@@ -688,20 +737,20 @@ class ResultsPanel(QWidget):
         self.diff_caption.setText(f"{_elide(left, 72)}      {_elide(right, 72)}")
         self.diff_caption.setToolTip(f"{left}\n{right}")
 
-        for column, label_text, path in ((2, site1_label, site1_path),
-                                         (3, site2_label, site2_path)):
+        for column, label_text, path in (
+            (2, site1_label, site1_path),
+            (3, site2_label, site2_path),
+        ):
             header_item = self.diff_table.horizontalHeaderItem(column)
             if header_item is not None:
-                header_item.setToolTip(
-                    f"{label_text}\n{path}" if path else label_text
-                )
+                header_item.setToolTip(f"{label_text}\n{path}" if path else label_text)
 
         preview_rows: List[List[str]] = []
         for display_name, diff_path in self._diff_csv_paths:
             if len(preview_rows) >= DIFF_PREVIEW_LIMIT:
                 break
             try:
-                with open(diff_path, 'r', encoding='utf-8-sig') as f:
+                with open(diff_path, "r", encoding="utf-8-sig") as f:
                     reader = csv.reader(f)
                     next(reader, None)
                     for row in reader:
@@ -709,15 +758,19 @@ class ResultsPanel(QWidget):
                             break
                         if len(row) < 4:
                             continue
-                        preview_rows.append([row[0], row[1], row[2], row[3], display_name])
+                        preview_rows.append(
+                            [row[0], row[1], row[2], row[3], display_name]
+                        )
             except Exception:
                 continue
 
         if not preview_rows:
-            if results.get('diff_export_enabled') is False:
-                message = ("Difference export was turned off for this run. "
-                           "Tick 'Export Differences' before starting to "
-                           "get the per-cell detail.")
+            if results.get("diff_export_enabled") is False:
+                message = (
+                    "Difference export was turned off for this run. "
+                    "Tick 'Export Differences' before starting to "
+                    "get the per-cell detail."
+                )
             else:
                 message = "No cell-level differences to preview."
             self._show_empty_message(self.diff_table, 5, message)
@@ -731,8 +784,8 @@ class ResultsPanel(QWidget):
             item_v1 = QTableWidgetItem(str(v1))
             item_v2 = QTableWidgetItem(str(v2))
             if v1 != v2:
-                item_v1.setBackground(QColor('#fdf2f0'))
-                item_v2.setBackground(QColor('#eefaf2'))
+                item_v1.setBackground(QColor("#fdf2f0"))
+                item_v2.setBackground(QColor("#eefaf2"))
             self.diff_table.setItem(row_idx, 2, item_v1)
             self.diff_table.setItem(row_idx, 3, item_v2)
             self.diff_table.setItem(row_idx, 4, QTableWidgetItem(pair_name))

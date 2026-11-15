@@ -22,13 +22,13 @@ and a ``span`` inside the 0..1 range, and ``overall`` composes them:
 File mode has no download phase, so it reports the validate phase as
 base=0.0 span=1.0 and the bar behaves normally.
 """
+
 import threading
 import time
 from dataclasses import dataclass
 
-
-PHASE_DOWNLOAD = 'download'
-PHASE_VALIDATE = 'validate'
+PHASE_DOWNLOAD = "download"
+PHASE_VALIDATE = "validate"
 
 # Split of the progress bar between the two phases of a download-and-compare
 # run. Download dominates because it is usually the slow part.
@@ -40,29 +40,34 @@ VALIDATE_SPAN = 0.4
 # per second and lock up the UI thread.
 PROGRESS_INTERVAL = 0.1
 
-PAIR_PENDING = 'pending'
-PAIR_DOWNLOADING = 'downloading'
-PAIR_DONE = 'done'
-PAIR_FAILED = 'failed'
-PAIR_CANCELLED = 'cancelled'
+PAIR_PENDING = "pending"
+PAIR_DOWNLOADING = "downloading"
+PAIR_DONE = "done"
+PAIR_FAILED = "failed"
+PAIR_CANCELLED = "cancelled"
 
 
 @dataclass(frozen=True)
 class ProgressUpdate:
     """One snapshot of overall run progress."""
+
     phase: str
     index: int
     total: int
     label: str
     fraction: float = 0.0
-    detail: str = ''
+    detail: str = ""
     base: float = 0.0
     span: float = 1.0
 
     @property
     def overall(self) -> float:
         """Position on the 0..1 bar, composed from the phase window."""
-        frac = 0.0 if self.fraction < 0.0 else (1.0 if self.fraction > 1.0 else self.fraction)
+        frac = (
+            0.0
+            if self.fraction < 0.0
+            else (1.0 if self.fraction > 1.0 else self.fraction)
+        )
         value = self.base + self.span * frac
         return 0.0 if value < 0.0 else (1.0 if value > 1.0 else value)
 
@@ -75,11 +80,12 @@ class PairStatus:
     while numbering the run, which would break id-based row lookup whenever a
     row had been deleted in the UI before starting.
     """
+
     index: int
     state: str
     fraction: float = 0.0
-    detail: str = ''
-    error: str = ''
+    detail: str = ""
+    error: str = ""
 
     @property
     def percent(self) -> int:
@@ -115,21 +121,21 @@ class Throttle:
 def format_bytes(value) -> str:
     """Human-readable byte count. Returns '' for an unknown size."""
     if value is None or value <= 0:
-        return ''
+        return ""
     size = float(value)
-    for unit in ('B', 'KB', 'MB', 'GB'):
-        if size < 1024 or unit == 'GB':
-            if unit == 'B':
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            if unit == "B":
                 return f"{int(size)} B"
             return f"{size:.1f} {unit}"
         size /= 1024
-    return ''
+    return ""
 
 
 def truncate(text: str, limit: int = 60) -> str:
     """Shorten a label for a single status line, keeping the tail readable."""
     if not text:
-        return ''
+        return ""
     if len(text) <= limit:
         return text
-    return text[: limit - 1] + '…'
+    return text[: limit - 1] + "…"
