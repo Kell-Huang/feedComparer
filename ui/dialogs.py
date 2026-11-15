@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 from core.logger import DebugLogger
 from core.reader import FileReader
 
+from .format import floor_percent
+
 from .icons import make_pixmap
 
 
@@ -233,7 +235,8 @@ class CompletionDialog(QDialog):
             f"<b>Download failed:</b> {download_failed}<br>"
             f"<b>Validation failed:</b> {validation_failed}<br>"
             f"<br>"
-            f"<b>Overall Match Rate:</b> {summary_data.get('match_rate', 0)}%<br>"
+            f"<b>Overall Match Rate:</b> "
+            f"{floor_percent(summary_data.get('match_rate', 0))}<br>"
             f"<b>Total Differences:</b> {summary_data.get('diffs', 0):,}<br>"
         )
         report_path = summary_data.get("report_path")

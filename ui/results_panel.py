@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 )
 
 from .delegates import BadgeDelegate
+from .format import floor_percent
 from .theme import (
     DANGER,
     SUCCESS,
@@ -380,7 +381,7 @@ class ResultsPanel(QWidget):
         parts.append(kv('Common SKUs compared', f'{total_skus:,}'))
         parts.append(kv('Differences found', f'{total_diffs:,}'))
         parts.append(kv('Missing SKUs', f'{total_missing:,}'))
-        parts.append(kv('Overall match rate', f'{avg_rate}%'))
+        parts.append(kv('Overall match rate', floor_percent(avg_rate)))
         parts.append('</table>')
 
         parts.append(
@@ -494,7 +495,7 @@ class ResultsPanel(QWidget):
             badge.setToolTip(f"{rate:.1f}% match")
             self.column_table.setItem(row, 1, badge)
 
-            rate_item = _number_cell(f"{rate:.1f}%")
+            rate_item = _number_cell(floor_percent(rate))
             rate_item.setForeground(QColor(foreground))
             rate_item.setFont(_bold(self.column_table.font()))
             self.column_table.setItem(row, 2, rate_item)

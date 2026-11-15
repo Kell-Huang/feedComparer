@@ -680,3 +680,17 @@ def test_app_icon_asset_loads():
     sizes = {size.width() for size in icon.availableSizes()}
     # The .ico ships every size, so the shell is not downscaling one bitmap.
     assert {16, 32, 256} <= sizes, sizes
+
+
+def test_match_rate_is_floored_not_rounded():
+    """99.6% must not read as 100%: that would claim there are no differences."""
+    from ui.format import floor_percent
+
+    assert floor_percent(100) == "100%"
+    assert floor_percent(99.6) == "99%"
+    assert floor_percent(99.999) == "99%"
+    assert floor_percent(0.9) == "0%"
+    assert floor_percent(0) == "0%"
+    assert floor_percent(None) == "0%"
+    assert floor_percent(150) == "100%"      # clamped, never over 100
+    assert floor_percent(-5) == "0%"
