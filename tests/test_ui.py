@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QApplication, QScrollArea
 from core.validator import FastBatchValidator
 
 DATA = Path(__file__).resolve().parent / "data"
+STYLE_PATH = Path(__file__).resolve().parent.parent / "styles" / "main.qss"
 _APP = None
 
 
@@ -113,6 +114,36 @@ def test_config_widget_exposes_exclude_keywords():
 
     widget.exclude_edit.setText("")
     assert widget.get_config()["exclude_keywords"] == []
+
+
+def test_stylesheet_has_no_nested_rules():
+    """A selector inserted after a block's opening brace silently kills it.
+
+    Qt does not warn: it drops the malformed rule and the affected widgets
+    fall back to the Fusion defaults, which looks like "the style changed"
+    rather than "the stylesheet is broken". QSS has no nesting, so a second
+    ``{`` before the closing ``}`` is always a mistake.
+    """
+    text = STYLE_PATH.read_text(encoding="utf-8")
+    depth = 0
+    for index, char in enumerate(text):
+        if char == "{":
+            depth += 1
+            assert depth == 1, f"nested rule at offset {index}"
+        elif char == "}":
+            depth -= 1
+            assert depth >= 0, f"unbalanced closing brace at offset {index}"
+    assert depth == 0, "unterminated rule"
+
+
+def test_action_bar_buttons_all_have_a_rule():
+    """New action-bar buttons must be styled deliberately, not by accident."""
+    text = STYLE_PATH.read_text(encoding="utf-8")
+    # The primary button is the plain QPushButton default (blue); every other
+    # action-bar button has to be named explicitly or it inherits that blue.
+    assert "QPushButton {" in text, "the primary button default is missing"
+    for name in ("exportBtn", "clearBtn", "cancelRunBtn", "editConfigBtn"):
+        assert f"QPushButton#{name}" in text, name
 
 
 def test_results_panel_renders_all_tabs():

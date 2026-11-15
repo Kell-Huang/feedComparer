@@ -49,6 +49,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QTabWidget,
     QVBoxLayout,
@@ -84,10 +85,10 @@ EXCLUDE_COLUMNS_KEYWORDS = ["stock", "price"]
 # Total cooperative shutdown budget: 10s + 10s = 20s before prompting the user.
 SHUTDOWN_WAIT_MS = 10000
 
-# Height of the tallest mode form (API Mode: project + two site groups +
-# channel lists + pairing table) plus the action bar. Measured, not guessed:
-# it is the point at which every mode fits without scrolling at 100% scale.
-FORM_HEIGHT = 540
+# The action bar's height, and the smallest useful results panel. The initial
+# splitter split is derived from these plus the tallest form's own minimum.
+ACTION_BAR_HEIGHT = 46
+RESULTS_MIN_HEIGHT = 150
 
 _EXPORT_COPY_CHUNK = 1 << 20
 
@@ -241,20 +242,36 @@ class MainWindow(QMainWindow):
             self._split_applied = True
             self._apply_initial_split()
 
+    def _form_height(self) -> int:
+        """Height the tallest mode form needs, plus the action bar.
+
+        Derived from each form's minimum layout height rather than a
+        hand-tuned number: the forms are scroll areas whose content holds
+        fixed-height tables and lists, so this is the point below which
+        controls start disappearing behind the fold.
+        """
+        need = 0
+        for tab in (self.file_tab, self.api_tab, self.manual_tab):
+            scroll = tab.findChild(QScrollArea)
+            content = scroll.widget() if scroll is not None else None
+            if content is not None:
+                need = max(need, content.minimumSizeHint().height())
+        return need + ACTION_BAR_HEIGHT
+
     def _apply_initial_split(self) -> None:
-        """Give the forms FORM_HEIGHT; whatever is left goes to the results.
+        """Give the forms what they need; whatever is left goes to results.
 
         The column configuration used to sit on every form and made them so
         tall that the results panel had to start at 64px. With it on its own
-        tab the forms are short, so the reclaimed height goes where it is
-        useful instead of leaving dead space under a 110px File Mode form.
+        tab the forms are shorter, so the reclaimed height can go to the
+        results panel instead of leaving dead space under a 110px form.
         """
         total = self.splitter.height()
         if total <= 0:
             return
-        top = min(max(FORM_HEIGHT, int(total * 0.55)), total - 150)
-        top = max(top, self.mode_tabs.minimumHeight() + 46)
-        self.splitter.setSizes([top, max(total - top, 150)])
+        top = min(self._form_height(), total - RESULTS_MIN_HEIGHT)
+        top = max(top, self.mode_tabs.minimumHeight() + ACTION_BAR_HEIGHT)
+        self.splitter.setSizes([top, max(total - top, RESULTS_MIN_HEIGHT)])
 
     def _build_action_bar(self) -> QWidget:
         """Persistent Run / Export / Clear bar shared by every mode."""
