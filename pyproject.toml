@@ -11,6 +11,11 @@
 
 [tool.black]
 line-length = 88
+# Pipfile requires 3.13. Without this, black infers a target from the syntax
+# each file happens to use, which is lower than what the project actually
+# supports — so it refuses to use parenthesised context managers (3.10+) and
+# falls back to a trailing comma after the `with` header instead.
+target-version = ["py313"]
 
 [tool.isort]
 profile = "black"

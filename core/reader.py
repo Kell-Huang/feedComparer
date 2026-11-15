@@ -167,9 +167,10 @@ class FileReader:
         fd, tmp_name = tempfile.mkstemp(suffix=".csv", prefix="feed_transcoded_")
         tmp_path = Path(tmp_name)
         try:
-            with open(file_path, "rb") as src, os.fdopen(
-                fd, "w", encoding="utf-8", newline=""
-            ) as dst:
+            with (
+                open(file_path, "rb") as src,
+                os.fdopen(fd, "w", encoding="utf-8", newline="") as dst,
+            ):
                 decoder = codecs.getincrementaldecoder(encoding)(errors="replace")
                 while True:
                     chunk = src.read(_TRANSCODE_CHUNK)

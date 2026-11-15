@@ -907,9 +907,10 @@ class MainWindow(QMainWindow):
         A diff file can hold millions of rows; reading it into a DataFrame
         just to rename two columns would triple peak memory for no reason.
         """
-        with open(src, "r", encoding="utf-8-sig", newline="") as f_in, open(
-            dst, "w", encoding="utf-8-sig", newline=""
-        ) as f_out:
+        with (
+            open(src, "r", encoding="utf-8-sig", newline="") as f_in,
+            open(dst, "w", encoding="utf-8-sig", newline="") as f_out,
+        ):
             f_in.readline()  # discard original header
             writer = csv.writer(f_out)
             if site1 and site2:
