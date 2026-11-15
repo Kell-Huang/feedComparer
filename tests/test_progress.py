@@ -21,7 +21,6 @@ from core.progress import (
     DOWNLOAD_SPAN,
     PAIR_CANCELLED,
     PAIR_DONE,
-    PAIR_DOWNLOADING,
     PAIR_FAILED,
     PAIR_PENDING,
     PHASE_DOWNLOAD,

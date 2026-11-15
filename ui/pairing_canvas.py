@@ -29,10 +29,11 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPen
+from PySide6.QtGui import (QColor, QFontMetrics, QPainter, QPainterPath, QPen,
+                           QPixmap)
 from PySide6.QtWidgets import QAbstractScrollArea, QWidget
 
-from .theme import DANGER, SUCCESS, TEXT_SECONDARY
+from .theme import DANGER, SUCCESS
 
 
 # Geometry. Chips are laid out in two columns with a gap wide enough for the
@@ -56,11 +57,11 @@ GROW_MS = 180
 FADE_MS = 150
 PULSE_MS = 220
 CURVE_SAMPLES = 40
+HIT_TEST_SAMPLES = 12
 
 # Colours mirror styles/main.qss. The canvas paints itself, so it cannot take
 # these from the stylesheet the way a QSS-styled widget would.
 ACCENT = '#2f6fed'
-ACCENT_SOFT = '#eef4ff'
 CHIP_BG = '#f7f8fa'
 BORDER = '#e4e7ec'
 BORDER_STRONG = '#d0d5dd'
@@ -107,6 +108,10 @@ class PairingCanvas(QWidget):
         self._drag_moved = False
         self._anchor: Optional[Tuple[str, int]] = None
 
+        self._chip_cache: Optional[QPixmap] = None
+        self._elide_cache: dict = {}
+        self._port_shapes: dict = {}
+        self._link_positions: dict = {}
         self._growing: List[_Pending] = []
         self._fading: List[_Pending] = []
         self._pulses: List[_Pending] = []
@@ -132,6 +137,8 @@ class PairingCanvas(QWidget):
         self._left = list(left)
         self._right = list(right)
         self._links = [tuple(link) for link in links]
+        self._elide_cache.clear()
+        self._invalidate_chips()
         self._drag = None
         self._anchor = None
         self.setFixedHeight(self._content_height())
@@ -146,16 +153,19 @@ class PairingCanvas(QWidget):
         self._drag = None
         self._anchor = None
         self.setCursor(Qt.ArrowCursor if locked else Qt.ArrowCursor)
+        self._invalidate_chips()
         self.update()
 
     def set_pair_status(self, index: int, state: str,
                         fraction: float = 0.0) -> None:
         """Colour one link by download state: queued/downloading/done/failed."""
         self._status[index] = (state, fraction)
+        self._invalidate_chips()
         self.update()
 
     def clear_pair_status(self) -> None:
         self._status.clear()
+        self._invalidate_chips()
         self.update()
 
     # ------------------------------------------------------------------
@@ -230,7 +240,13 @@ class PairingCanvas(QWidget):
 
     def _link_at(self, pos: QPointF) -> Optional[Tuple[int, int]]:
         for link in self._links:
-            if self._distance_to_path(self._link_path(*link), pos) <= 5.0:
+            path = self._link_path(*link)
+            # Cheap reject: a point outside the curve's bounding box (grown by
+            # the click tolerance) cannot be within tolerance of the curve.
+            box = path.boundingRect().adjusted(-6, -6, 6, 6)
+            if not box.contains(pos):
+                continue
+            if self._distance_to_path(path, pos) <= 5.0:
                 return link
         return None
 
@@ -244,8 +260,12 @@ class PairingCanvas(QWidget):
         """
         best = float('inf')
         previous = path.pointAtPercent(0.0)
-        for step in range(1, CURVE_SAMPLES + 1):
-            current = path.pointAtPercent(step / CURVE_SAMPLES)
+        # Hit testing does not need the animation's resolution: a straight
+        # segment is exact at any sample count, and 12 samples put a 5px
+        # tolerance well inside the curve.
+        samples = HIT_TEST_SAMPLES
+        for step in range(1, samples + 1):
+            current = path.pointAtPercent(step / samples)
             best = min(best, _point_segment_distance(pos, previous, current))
             previous = current
         return best
@@ -271,9 +291,15 @@ class PairingCanvas(QWidget):
             )
             return
 
+        # Links are cheap to draw and change every frame during a drag or an
+        # animation; the chips are expensive (rounded rects, port paths, text)
+        # and only change when the model, the hover or the status does. So the
+        # chip layer is cached and the links are painted live on top of it.
         self._paint_links(painter)
+        painter.drawPixmap(0, 0, self._chip_layer())
+        # The pulse ring is centred on a port, so it has to be painted after
+        # the chips — otherwise the chip covers all but its left edge.
         self._paint_pulses(painter)
-        self._paint_chips(painter)
         self._paint_drag(painter)
 
     def _paint_links(self, painter: QPainter) -> None:
@@ -309,74 +335,100 @@ class PairingCanvas(QWidget):
                 continue
             ratio = min(1.0, pulse.elapsed / pulse.duration)
             centre = self._anchor_point('right', pulse.link[1])
-            radius = 4.0 + ratio * 7.0
+            # Start outside the 4px dot, otherwise the ring sits exactly on it
+            # and the port reads as hollow rather than as a pulse.
+            radius = 6.5 + ratio * 5.5
             colour = QColor(ACCENT)
             colour.setAlphaF(max(0.0, 1.0 - ratio))
             painter.setPen(QPen(colour, 1.6))
             painter.setBrush(Qt.NoBrush)
             painter.drawEllipse(centre, radius, radius)
 
+    def _chip_layer(self) -> QPixmap:
+        """Chips rendered once and reused until something about them changes."""
+        if self._chip_cache is not None:
+            return self._chip_cache
+
+        ratio = self.devicePixelRatioF() or 1.0
+        pixmap = QPixmap(int(self.width() * ratio), int(self.height() * ratio))
+        pixmap.setDevicePixelRatio(ratio)
+        pixmap.fill(Qt.transparent)
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.TextAntialiasing, True)
+        self._paint_chips(painter)
+        painter.end()
+
+        self._chip_cache = pixmap
+        return pixmap
+
+    def _invalidate_chips(self) -> None:
+        self._chip_cache = None
+
+    def resizeEvent(self, event) -> None:
+        self._invalidate_chips()
+        super().resizeEvent(event)
+
     def _paint_chips(self, painter: QPainter) -> None:
         metrics = QFontMetrics(self.font())
+        # Linked lookups and the link->position map are rebuilt once per frame.
+        # Doing them per chip was O(chips x links) and showed up at 40 links.
+        linked_left = {link[0] for link in self._links}
+        linked_right = {link[1] for link in self._links}
+        self._link_positions = {link: position
+                                for position, link in enumerate(self._links)}
+
+        border_pen = QPen(QColor(BORDER), 1)
+        border_strong_pen = QPen(QColor(BORDER_STRONG), 1)
+        divider_pen = QPen(QColor(BORDER_STRONG), 1)
+        chip_linked_brush = QColor(CHIP_BG)
+        chip_plain_brush = QColor('#ffffff')
+        port_linked_brush = QColor('#dbe7ff')
+        port_hover_brush = QColor('#e8efff')
+        port_plain_brush = QColor('#f2f4f7')
+        no_pen = Qt.NoPen
+
         for side, items in (('left', self._left), ('right', self._right)):
+            linked_set = linked_left if side == 'left' else linked_right
             for index, name in enumerate(items):
                 chip = self._chip_rect(side, index)
                 port = self._port_rect(side, index)
-                linked = any(
-                    (link[0] == index) if side == 'left' else (link[1] == index)
-                    for link in self._links
-                )
+                linked = index in linked_set
                 is_hover = self._hover == (side, index)
                 is_anchor = self._anchor == (side, index)
 
-                painter.setPen(QPen(QColor(BORDER_STRONG if linked else BORDER), 1))
-                painter.setBrush(QColor(CHIP_BG if linked else '#ffffff'))
+                painter.setPen(border_strong_pen if linked else border_pen)
+                painter.setBrush(chip_linked_brush if linked else chip_plain_brush)
                 painter.drawRoundedRect(chip, 6, 6)
 
                 # Port strip: rounded only on the outer edge so it reads as a
-                # notch cut into the chip rather than a separate pill.
-                port_path = QPainterPath()
-                radius = 6.0
-                if side == 'left':
-                    port_path.moveTo(port.left(), port.top())
-                    port_path.lineTo(port.right() - radius, port.top())
-                    port_path.arcTo(QRectF(port.right() - 2 * radius, port.top(),
-                                           2 * radius, 2 * radius), 90, -90)
-                    port_path.lineTo(port.right(), port.bottom() - radius)
-                    port_path.arcTo(QRectF(port.right() - 2 * radius,
-                                           port.bottom() - 2 * radius,
-                                           2 * radius, 2 * radius), 0, -90)
-                    port_path.lineTo(port.left(), port.bottom())
-                else:
-                    port_path.moveTo(port.right(), port.top())
-                    port_path.lineTo(port.left() + radius, port.top())
-                    port_path.arcTo(QRectF(port.left(), port.top(),
-                                           2 * radius, 2 * radius), 90, 90)
-                    port_path.lineTo(port.left(), port.bottom() - radius)
-                    port_path.arcTo(QRectF(port.left(), port.bottom() - 2 * radius,
-                                           2 * radius, 2 * radius), 180, 90)
-                    port_path.lineTo(port.right(), port.bottom())
-                port_path.closeSubpath()
-
+                # notch cut into the chip rather than a separate pill. The
+                # shape is built once per side and translated into place —
+                # rebuilding 80 paths with arcs every frame was the single
+                # biggest cost of a repaint.
+                port_shape = self._port_shape(side, port.width(), port.height())
+                painter.save()
+                painter.translate(port.left(), port.top())
+                painter.setPen(border_strong_pen if linked else border_pen)
                 if linked:
-                    fill = '#dbe7ff'
+                    painter.setBrush(port_linked_brush)
                 elif is_hover or is_anchor:
-                    fill = '#e8efff'
+                    painter.setBrush(port_hover_brush)
                 else:
-                    fill = '#f2f4f7'
-                painter.setPen(QPen(QColor(BORDER_STRONG if linked else BORDER), 1))
-                painter.setBrush(QColor(fill))
-                painter.drawPath(port_path)
+                    painter.setBrush(port_plain_brush)
+                painter.drawPath(port_shape)
+                painter.restore()
 
                 # Divider between body and port.
                 divider_x = port.left() if side == 'left' else port.right()
-                painter.setPen(QPen(QColor(BORDER_STRONG), 1))
+                painter.setPen(divider_pen)
                 painter.drawLine(QPointF(divider_x, port.top() + 1),
                                  QPointF(divider_x, port.bottom() - 1))
 
                 if linked:
                     colour = QColor(self._port_dot_colour(index, side))
-                    painter.setPen(Qt.NoPen)
+                    painter.setPen(no_pen)
                     painter.setBrush(colour)
                     painter.drawEllipse(port.center(), DOT_RADIUS, DOT_RADIUS)
                 elif is_anchor:
@@ -385,13 +437,52 @@ class PairingCanvas(QWidget):
                     painter.drawEllipse(port.center(), DOT_RADIUS, DOT_RADIUS)
 
                 text_rect = self._text_rect(side, index)
-                elided = metrics.elidedText(
-                    name, Qt.ElideMiddle, int(text_rect.width())
-                )
+                elided = self._elided(name, int(text_rect.width()), metrics)
                 painter.setPen(QColor(TEXT if linked else MUTED))
                 painter.drawText(
                     text_rect, Qt.AlignVCenter | Qt.AlignLeft, elided,
                 )
+
+    def _port_shape(self, side: str, width: float, height: float) -> QPainterPath:
+        """Port outline at the origin, rounded on the outer edge only."""
+        key = (side, round(width, 1), round(height, 1))
+        cached = self._port_shapes.get(key)
+        if cached is not None:
+            return cached
+
+        radius = 6.0
+        path = QPainterPath()
+        if side == 'left':
+            path.moveTo(0, 0)
+            path.lineTo(width - radius, 0)
+            path.arcTo(QRectF(width - 2 * radius, 0, 2 * radius, 2 * radius), 90, -90)
+            path.lineTo(width, height - radius)
+            path.arcTo(QRectF(width - 2 * radius, height - 2 * radius,
+                              2 * radius, 2 * radius), 0, -90)
+            path.lineTo(0, height)
+        else:
+            path.moveTo(width, 0)
+            path.lineTo(radius, 0)
+            path.arcTo(QRectF(0, 0, 2 * radius, 2 * radius), 90, 90)
+            path.lineTo(0, height - radius)
+            path.arcTo(QRectF(0, height - 2 * radius, 2 * radius, 2 * radius), 180, 90)
+            path.lineTo(width, height)
+        path.closeSubpath()
+        self._port_shapes[key] = path
+        return path
+
+    def _elided(self, text: str, width: int, metrics: QFontMetrics) -> str:
+        """Elide a label, cached per (text, width).
+
+        Text shaping is the most expensive part of a chip, and during a drag
+        nothing about the labels changes — only the cursor moves.
+        """
+        key = (text, width)
+        cached = self._elide_cache.get(key)
+        if cached is None:
+            cached = metrics.elidedText(text, Qt.ElideMiddle, max(40, width))
+            self._elide_cache[key] = cached
+        return cached
 
     def _paint_drag(self, painter: QPainter) -> None:
         if self._drag is None or not self._drag_moved:
@@ -420,10 +511,12 @@ class PairingCanvas(QWidget):
         painter.drawPath(polyline)
 
     def _link_color(self, link: Tuple[int, int]) -> str:
-        try:
-            index = self._links.index(link)
-        except ValueError:
-            return LINK
+        index = getattr(self, '_link_positions', {}).get(link)
+        if index is None:
+            try:
+                index = self._links.index(link)
+            except ValueError:
+                return LINK
         state = self._status.get(index, ('', 0.0))[0]
         return LINK_STATE_COLORS.get(state, LINK)
 
@@ -460,6 +553,7 @@ class PairingCanvas(QWidget):
         # A click on empty space clears a pending anchor.
         if self._anchor is not None:
             self._anchor = None
+            self._invalidate_chips()
             self.update()
 
     def mouseMoveEvent(self, event) -> None:
@@ -469,6 +563,7 @@ class PairingCanvas(QWidget):
             if hover != self._hover:
                 self._hover = hover
                 self.setCursor(Qt.OpenHandCursor if hover else Qt.ArrowCursor)
+                self._invalidate_chips()
                 self.update()
             return
 
@@ -491,6 +586,7 @@ class PairingCanvas(QWidget):
         if not moved:
             # Press-and-release on the same port: arm click-to-connect.
             self._handle_anchor_click(source)
+            self._invalidate_chips()
             self.update()
             return
 

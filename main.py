@@ -109,9 +109,10 @@ def main() -> int:
         window = MainWindow()
     except Exception as e:
         traceback.print_exc()
-        QMessageBox.critical(
+        show_message(
             None, "Startup Error",
             f"Failed to initialise the application:\n\n{e}",
+            QMessageBox.Critical,
         )
         return 1
 
