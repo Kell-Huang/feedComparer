@@ -10,11 +10,13 @@ from typing import Dict, List, Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMessageBox, QPushButton, QVBoxLayout,
+    QListWidgetItem, QMessageBox, QPushButton, QSizePolicy, QVBoxLayout,
 )
 
 from core.logger import DebugLogger
 from core.reader import FileReader
+
+from .icons import make_pixmap
 
 
 class ColumnSelectorDialog(QDialog):
@@ -124,7 +126,9 @@ class ColumnSelectorDialog(QDialog):
                     self._checked_state[col] = True
             self._populate_list(self.all_columns)
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to read file:\n{str(e)}")
+            show_message(self, "Cannot Read File",
+                         f"Failed to read the file:\n\n{str(e)}",
+                         QMessageBox.Critical)
             self.reject()
 
     def _populate_list(self, columns: List[str]) -> None:
@@ -255,15 +259,127 @@ class CompletionDialog(QDialog):
         layout.addLayout(btn_layout)
 
 
+class MessageDialog(QDialog):
+    """Flat message dialog that matches the rest of the application.
+
+    ``QMessageBox`` brings the platform icon set (a glossy red cross, a blue
+    question mark) and a grid layout that pushes the body text hundreds of
+    pixels away from the icon. Neither matches the line icons used everywhere
+    else, and the two-button variant renders Yes and No as identical primary
+    buttons. This dialog keeps the same call sites but draws a line glyph on a
+    tinted badge, a two-weight text block, and an explicit button hierarchy.
+
+    ``choice`` holds the index of the button that was clicked, or -1 when the
+    dialog was dismissed with Esc or the window close button.
+    """
+
+    _WIDTH = 440
+    # 440 - left margin 20 - right margin 20 - badge 32 - header spacing 12
+    _CONTENT_WIDTH = _WIDTH - 20 - 20 - 32 - 12
+
+    _SEVERITY = {
+        'info': ('info', '#2f6fed'),
+        'warning': ('alert', '#b54708'),
+        'error': ('error', '#b42318'),
+        'question': ('question', '#2f6fed'),
+    }
+
+    def __init__(self, parent, title: str, message: str,
+                 severity: str = 'info', buttons=None):
+        super().__init__(parent)
+        self.setObjectName("AppMessageDialog")
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.choice = -1
+
+        glyph, colour = self._SEVERITY.get(severity, self._SEVERITY['info'])
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 18)
+        layout.setSpacing(16)
+
+        header = QHBoxLayout()
+        header.setSpacing(12)
+
+        badge = QLabel()
+        badge.setObjectName(f"dlgBadge{severity.capitalize()}")
+        badge.setFixedSize(32, 32)
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setPixmap(make_pixmap(glyph, colour, 18))
+        header.addWidget(badge, alignment=Qt.AlignTop)
+
+        text_column = QVBoxLayout()
+        text_column.setSpacing(6)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("dlgTitle")
+        title_label.setWordWrap(True)
+        # Pin the width so the wrapped height is computed for the width the
+        # label actually gets. Without it QLabel's sizeHint assumes a much
+        # narrower box, reports extra lines, and the leftover height is shared
+        # out between the title and the body — which pushes them apart.
+        title_label.setMinimumWidth(self._CONTENT_WIDTH)
+        title_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        text_column.addWidget(title_label)
+
+        body_label = QLabel(message)
+        body_label.setObjectName("dlgBody")
+        body_label.setWordWrap(True)
+        body_label.setMinimumWidth(self._CONTENT_WIDTH)
+        body_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        # Error messages often carry a path worth copying.
+        body_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        text_column.addWidget(body_label)
+
+        header.addLayout(text_column, stretch=1)
+        layout.addLayout(header)
+
+        button_row = QHBoxLayout()
+        button_row.setSpacing(8)
+        button_row.addStretch()
+        for index, (text, is_primary, is_default) in enumerate(
+                buttons or [('OK', True, True)]):
+            button = QPushButton(text)
+            button.setObjectName("dlgPrimaryBtn" if is_primary else "dlgSecondaryBtn")
+            button.setAutoDefault(False)
+            button.clicked.connect(
+                lambda _checked=False, i=index: self._choose(i)
+            )
+            if is_default:
+                button.setDefault(True)
+            button_row.addWidget(button)
+        layout.addLayout(button_row)
+
+        self.setFixedWidth(self._WIDTH)
+        self.adjustSize()
+
+    def _choose(self, index: int) -> None:
+        self.choice = index
+        self.accept()
+
+    def keyPressEvent(self, event) -> None:
+        # Esc means "dismissed", which callers read as the safe default.
+        if event.key() == Qt.Key_Escape:
+            self.reject()
+            return
+        super().keyPressEvent(event)
+
+
+_ICON_SEVERITY = {
+    QMessageBox.Information: 'info',
+    QMessageBox.Warning: 'warning',
+    QMessageBox.Critical: 'error',
+    QMessageBox.Question: 'question',
+}
+
+
 def show_message(parent, title: str, message: str,
                  icon: QMessageBox.Icon = QMessageBox.Information) -> int:
-    """Thin wrapper around QMessageBox; styling comes from main.qss."""
-    msg_box = QMessageBox(parent)
-    msg_box.setObjectName("AppMessageBox")
-    msg_box.setWindowTitle(title)
-    msg_box.setText(message)
-    msg_box.setIcon(icon)
-    return msg_box.exec()
+    """Show a single-button message. Returns the dialog result code."""
+    dialog = MessageDialog(
+        parent, title, message, _ICON_SEVERITY.get(icon, 'info'),
+    )
+    return dialog.exec()
 
 
 def show_question(parent, title: str, message: str,
@@ -273,11 +389,9 @@ def show_question(parent, title: str, message: str,
     Defaulting to No keeps a destructive action (replacing a hand-built
     pairing) from being confirmed by a stray Enter key.
     """
-    msg_box = QMessageBox(parent)
-    msg_box.setObjectName("AppMessageBox")
-    msg_box.setWindowTitle(title)
-    msg_box.setText(message)
-    msg_box.setIcon(QMessageBox.Question)
-    msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-    msg_box.setDefaultButton(QMessageBox.No if default_no else QMessageBox.Yes)
-    return msg_box.exec() == QMessageBox.Yes
+    dialog = MessageDialog(
+        parent, title, message, 'question',
+        [('No', False, default_no), ('Yes', True, not default_no)],
+    )
+    dialog.exec()
+    return dialog.choice == 1

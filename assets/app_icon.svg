@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Feed Validator</title>
+  <desc>Two feed sheets side by side; one row on each is highlighted in amber to mark a difference.</desc>
+  <rect width="256" height="256" rx="56" fill="#2f6fed"/>
+  <rect x="45" y="59" width="70" height="138" rx="13" fill="#ffffff"/>
+  <rect x="141" y="59" width="70" height="138" rx="13" fill="#ffffff"/>
+  <rect x="58" y="83" width="44" height="17" rx="8.5" fill="#a9c4f0"/>
+  <rect x="58" y="115" width="44" height="17" rx="8.5" fill="#f5a623"/>
+  <rect x="58" y="147" width="44" height="17" rx="8.5" fill="#a9c4f0"/>
+  <rect x="154" y="83" width="44" height="17" rx="8.5" fill="#a9c4f0"/>
+  <rect x="154" y="115" width="44" height="17" rx="8.5" fill="#a9c4f0"/>
+  <rect x="154" y="147" width="44" height="17" rx="8.5" fill="#f5a623"/>
+</svg>

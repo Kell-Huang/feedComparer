@@ -21,8 +21,9 @@ try:
     from PySide6.QtGui import QColor, QPalette
     from PySide6.QtWidgets import QApplication, QMessageBox
 
+    from ui.dialogs import show_message
     from ui.main_window import MainWindow
-    from ui.theme import load_stylesheet
+    from ui.theme import app_icon, load_stylesheet
 except ModuleNotFoundError as exc:
     sys.stderr.write(
         f"Missing dependency: {exc.name}\n\n"
@@ -92,6 +93,7 @@ def main() -> int:
     app.setOrganizationName('Feed Validator')
     app.setStyle('Fusion')
     app.setPalette(_build_palette())
+    app.setWindowIcon(app_icon())
 
     qss = _load_stylesheet()
     if qss:

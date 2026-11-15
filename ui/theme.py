@@ -20,6 +20,8 @@ from pathlib import Path
 APP_ROOT = Path(__file__).resolve().parent.parent
 ASSETS_DIR = APP_ROOT / "assets"
 STYLE_PATH = APP_ROOT / "styles" / "main.qss"
+ICON_PATH = ASSETS_DIR / "app_icon.ico"
+ICON_PNG_PATH = ASSETS_DIR / "app_icon_256.png"
 
 
 # Colours applied from Python (table cells, status pills). These mirror values
@@ -52,3 +54,20 @@ def load_stylesheet() -> str:
     except OSError:
         return ''
     return text.replace('@ASSETS@', ASSETS_DIR.as_posix())
+
+
+def app_icon():
+    """Window / taskbar icon, or a null QIcon if the assets are missing.
+
+    The .ico carries every size (16-256), so Windows picks the right one for
+    the title bar, the taskbar and the file preview instead of downscaling a
+    single bitmap. The PNG is only a fallback for a checkout without the .ico.
+    """
+    from PySide6.QtGui import QIcon
+
+    for path in (ICON_PATH, ICON_PNG_PATH):
+        if path.exists():
+            icon = QIcon(str(path))
+            if not icon.isNull():
+                return icon
+    return QIcon()

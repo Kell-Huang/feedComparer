@@ -622,3 +622,61 @@ def test_manual_canvas_edit_rebuilds_the_pair_list():
     finally:
         window.close()
         _restore_manual_modals(module, originals)
+
+
+def test_message_dialog_uses_badge_and_single_primary_action():
+    """The flat dialog replaced QMessageBox, which looked nothing like the app."""
+    _app()
+    from PySide6.QtWidgets import QLabel, QPushButton
+
+    from ui.dialogs import MessageDialog
+
+    dialog = MessageDialog(None, 'Validation Failed', 'Something broke.', 'error')
+    try:
+        badge = dialog.findChild(QLabel, 'dlgBadgeError')
+        assert badge is not None
+        assert not badge.pixmap().isNull(), 'severity glyph should render'
+        assert dialog.findChild(QLabel, 'dlgTitle').text() == 'Validation Failed'
+        assert dialog.findChild(QLabel, 'dlgBody').text() == 'Something broke.'
+
+        primary = dialog.findChildren(QPushButton, 'dlgPrimaryBtn')
+        assert [b.text() for b in primary] == ['OK']
+        assert not dialog.findChildren(QPushButton, 'dlgSecondaryBtn')
+        # Fixed width keeps short messages from stretching into a wide banner.
+        assert dialog.width() == 440
+    finally:
+        dialog.deleteLater()
+
+
+def test_question_dialog_defaults_to_the_safe_button():
+    _app()
+    from PySide6.QtWidgets import QPushButton
+
+    from ui.dialogs import MessageDialog
+
+    dialog = MessageDialog(None, 'Replace Pairing', 'Continue?', 'question',
+                           [('No', False, True), ('Yes', True, False)])
+    try:
+        secondary = dialog.findChildren(QPushButton, 'dlgSecondaryBtn')
+        primary = dialog.findChildren(QPushButton, 'dlgPrimaryBtn')
+        assert [b.text() for b in secondary] == ['No']
+        assert [b.text() for b in primary] == ['Yes']
+        # Enter must not confirm a destructive action.
+        assert secondary[0].isDefault()
+        assert not primary[0].isDefault()
+
+        primary[0].click()
+        assert dialog.choice == 1
+    finally:
+        dialog.deleteLater()
+
+
+def test_app_icon_asset_loads():
+    _app()
+    from ui.theme import app_icon
+
+    icon = app_icon()
+    assert not icon.isNull()
+    sizes = {size.width() for size in icon.availableSizes()}
+    # The .ico ships every size, so the shell is not downscaling one bitmap.
+    assert {16, 32, 256} <= sizes, sizes

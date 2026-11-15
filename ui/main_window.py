@@ -43,6 +43,7 @@ from .api_mode_tab import ApiModeTab
 from .dialogs import CompletionDialog, show_message
 from .file_mode_tab import FileModeTab
 from .icons import make_icon
+from .theme import app_icon
 from .manual_url_tab import ManualUrlTab
 from .results_panel import ResultsPanel
 from .workers import DownloadAndCompareWorker, ValidationWorker
@@ -98,6 +99,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self._config = _load_config()
+        self.setWindowIcon(app_icon())
         self._current_worker = None
         self._current_results: Optional[dict] = None
         self._log_lines: List[str] = []

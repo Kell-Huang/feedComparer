@@ -77,17 +77,23 @@ ui/                     PySide6 widgets
   api_mode_tab.py       API mode form
   manual_url_tab.py     manual URL form
   config_widget.py      shared column configuration
+  pairing_canvas.py     drag-to-pair map for manual mode
   pair_status.py        live per-pair status column
   delegates.py          status pill delegate
-  theme.py              design tokens + stylesheet loader
-  icons.py              inline SVG icons
-  dialogs.py            column picker, completion dialog
+  theme.py              stylesheet loader, app icon
+  icons.py              inline SVG icons + message-dialog glyphs
+  dialogs.py            column picker, completion dialog, message dialog
   workers.py            QThread workers
   layout_utils.py       scrollable tab container
 styles/main.qss         stylesheet
-assets/                 SVG assets referenced by the stylesheet
+assets/                 app icon (svg / ico / png) + stylesheet SVGs
+tools/make_icon.py      regenerates the .ico from assets/app_icon.svg
 tests/                  test suites + fixture generator
 ```
+
+The application icon is generated, not hand-exported: edit `assets/app_icon.svg`
+and run `python tools/make_icon.py` to rebuild the multi-size `.ico` and the
+256 px preview.
 
 ## Tests
 

@@ -708,20 +708,59 @@ QLabel#pairCountLabel {
     font-size: 12px;
 }
 
-QMessageBox,
-QMessageBox#AppMessageBox {
+/* Message dialog. Replaces QMessageBox, whose stock icons and grid layout did
+   not match the rest of the UI (and whose label rule forced a 280px minimum
+   that pushed the body text far from the icon). */
+QDialog#AppMessageDialog {
     background-color: #ffffff;
 }
 
-QMessageBox QLabel {
+QLabel#dlgTitle {
     color: #1f2937;
-    font-size: 13px;
-    min-width: 280px;
-    padding: 6px;
+    font-size: 14px;
+    font-weight: bold;
 }
 
-QMessageBox QPushButton {
-    min-width: 76px;
+QLabel#dlgBody {
+    color: #475467;
+    font-size: 13px;
+}
+
+QLabel#dlgBadgeInfo,
+QLabel#dlgBadgeQuestion {
+    background-color: #eef4ff;
+    border-radius: 8px;
+}
+
+QLabel#dlgBadgeWarning {
+    background-color: #fef3e6;
+    border-radius: 8px;
+}
+
+QLabel#dlgBadgeError {
+    background-color: #fee4e2;
+    border-radius: 8px;
+}
+
+QPushButton#dlgPrimaryBtn,
+QPushButton#dlgSecondaryBtn {
+    min-width: 84px;
+}
+
+QPushButton#dlgSecondaryBtn {
+    background-color: #ffffff;
+    color: #344054;
+    border: 1px solid #d0d5dd;
+}
+
+QPushButton#dlgSecondaryBtn:hover {
+    background-color: #f7f8fa;
+}
+
+QPushButton#dlgSecondaryBtn:disabled {
+    background-color: #f9fafb;
+    color: #b9c0ca;
+    border-color: #eceff3;
 }
 
 /* ----------------------------------------------------------------------------

@@ -44,7 +44,61 @@ _BODIES = {
     ),
 
     'stop': '<rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1.4" fill="{c}"/>',
+
+    # Message-dialog glyphs. Drawn on the same 16x16 grid as the button icons
+    # so a dialog and the toolbar above it share one visual language.
+    'alert': (
+        '<path d="M8 2.5 14.3 13.3H1.7z" fill="none" stroke="{c}" '
+        'stroke-width="1.5" stroke-linejoin="round"/>'
+        '<path d="M8 6.5v3.2" fill="none" stroke="{c}" stroke-width="1.6" '
+        'stroke-linecap="round"/>'
+        '<circle cx="8" cy="11.8" r="0.9" fill="{c}"/>'
+    ),
+
+    'error': (
+        '<circle cx="8" cy="8" r="6" fill="none" stroke="{c}" stroke-width="1.5"/>'
+        '<path d="M5.9 5.9 10.1 10.1M10.1 5.9 5.9 10.1" fill="none" stroke="{c}" '
+        'stroke-width="1.6" stroke-linecap="round"/>'
+    ),
+
+    'question': (
+        '<circle cx="8" cy="8" r="6" fill="none" stroke="{c}" stroke-width="1.5"/>'
+        '<path d="M6.2 6.4a1.9 1.9 0 1 1 2.4 1.8c-.5.2-.7.6-.7 1.1v.3" '
+        'fill="none" stroke="{c}" stroke-width="1.5" stroke-linecap="round"/>'
+        '<circle cx="8" cy="11.7" r="0.85" fill="{c}"/>'
+    ),
+
+    'info': (
+        '<circle cx="8" cy="8" r="6" fill="none" stroke="{c}" stroke-width="1.5"/>'
+        '<path d="M8 7.4v3.5" fill="none" stroke="{c}" stroke-width="1.6" '
+        'stroke-linecap="round"/>'
+        '<circle cx="8" cy="5.1" r="0.9" fill="{c}"/>'
+    ),
 }
+
+
+def make_pixmap(name: str, color: str = '#ffffff', size: int = 16) -> QPixmap:
+    """Render one icon to a transparent pixmap at ``size`` pixels.
+
+    Returns a null pixmap for an unknown name or a missing SVG plugin, so
+    callers can test ``isNull()`` instead of catching exceptions.
+    """
+    body = _BODIES.get(name)
+    if body is None or QSvgRenderer is None:
+        return QPixmap()
+
+    svg = _SVG_TEMPLATE.format(body=body.format(c=color)).encode('utf-8')
+    renderer = QSvgRenderer(QByteArray(svg))
+    if not renderer.isValid():
+        return QPixmap()
+
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    renderer.render(painter)
+    painter.end()
+    return pixmap
 
 
 def make_icon(name: str, color: str = '#ffffff', size: int = 16) -> QIcon:
@@ -53,24 +107,11 @@ def make_icon(name: str, color: str = '#ffffff', size: int = 16) -> QIcon:
     Returns a null QIcon when the SVG plugin is unavailable or the name is
     unknown, so callers can use the result unconditionally.
     """
-    body = _BODIES.get(name)
-    if body is None or QSvgRenderer is None:
-        return QIcon()
-
-    svg = _SVG_TEMPLATE.format(body=body.format(c=color)).encode('utf-8')
-    renderer = QSvgRenderer(QByteArray(svg))
-    if not renderer.isValid():
-        return QIcon()
-
     icon = QIcon()
     # 1x and 2x keep the icon sharp on high-DPI screens.
     for scale in (1, 2):
-        pixels = size * scale
-        pixmap = QPixmap(pixels, pixels)
-        pixmap.fill(Qt.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        renderer.render(painter)
-        painter.end()
+        pixmap = make_pixmap(name, color, size * scale)
+        if pixmap.isNull():
+            return QIcon()
         icon.addPixmap(pixmap)
     return icon
