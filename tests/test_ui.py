@@ -510,6 +510,50 @@ def test_no_empty_family_fonts():
     assert not offenders, f"empty-family QFont at {offenders}"
 
 
+def test_channel_destination_url_handles_both_response_shapes():
+    """The platform keys feed destinations by id; an older shape used "2".
+
+    Reading only ``feed_destinations["2"]`` left every channel's link empty
+    against the current API, so API Mode could not add a single pair — it
+    reported "One of the selected channels has no downloadable URL".
+    """
+    from ui.workers import destination_url
+
+    current = {
+        "4711": {
+            "destination_id": 12,
+            "active": True,
+            "urls": ["https://x/channel/321/criteo_de.csv"],
+        },
+        "4712": {"destination_id": 12, "active": False, "urls": []},
+        "4713": {"destination_id": 47, "active": False, "urls": []},
+    }
+    assert destination_url(current) == "https://x/channel/321/criteo_de.csv"
+
+    # An inactive destination must never be used, even if it has urls.
+    assert (
+        destination_url({"1": {"active": False, "urls": ["https://x/off.csv"]}}) == ""
+    )
+    # Active but empty: nothing to download.
+    assert destination_url({"1": {"active": True, "urls": []}}) == ""
+    # Several active: the first wins.
+    assert (
+        destination_url(
+            {
+                "1": {"active": True, "urls": ["https://x/first.csv"]},
+                "2": {"active": True, "urls": ["https://x/second.csv"]},
+            }
+        )
+        == "https://x/first.csv"
+    )
+
+    # Legacy shape, still accepted.
+    assert destination_url({"2": ["https://x/legacy.csv"]}) == "https://x/legacy.csv"
+    assert destination_url({"2": "https://x/legacy.csv"}) == "https://x/legacy.csv"
+    assert destination_url({}) == ""
+    assert destination_url(None) == ""
+
+
 def test_folder_labels_are_short_and_unambiguous():
     """File mode names the two sides after their folders."""
     from ui.workers import folder_labels

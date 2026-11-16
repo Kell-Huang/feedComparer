@@ -69,6 +69,36 @@ def folder_labels(path1: str, path2: str) -> Tuple[str, str]:
     return first, second
 
 
+def destination_url(feed_destinations) -> str:
+    """First downloadable URL among a channel's feed destinations.
+
+    The platform keys destinations by destination id:
+
+        {"4711": {"active": true, "urls": ["https://..."]}}
+
+    Older responses put a plain URL list under the key ``"2"``, so both
+    shapes are handled. Only an *active* destination with a non-empty url
+    list counts — taking an inactive one would download a feed the channel
+    no longer publishes. When several are active the first wins, which
+    matches the rule the comparison tool uses for its GOS channel.
+    """
+    if not isinstance(feed_destinations, dict):
+        return ""
+
+    for destination in feed_destinations.values():
+        if isinstance(destination, dict) and destination.get("active"):
+            urls = destination.get("urls")
+            if isinstance(urls, list) and urls:
+                return str(urls[0])
+
+    legacy = feed_destinations.get("2")
+    if isinstance(legacy, list) and legacy:
+        return str(legacy[0])
+    if isinstance(legacy, str) and legacy:
+        return legacy
+    return ""
+
+
 # Platform metadata calls are small JSON requests; a bounded timeout keeps a
 # dead endpoint from blocking a worker thread forever.
 API_TIMEOUT = 30
@@ -177,18 +207,10 @@ class FetchChannelsWorker(_FetchWorker):
             channels = payload.get("Channels") or []
             channel_list = []
             for ch in channels:
-                feed_dest = ch.get("feed_destinations") or {}
-                link = ""
-                if isinstance(feed_dest, dict):
-                    urls = feed_dest.get("2")
-                    if isinstance(urls, list):
-                        link = urls[0] if urls else ""
-                    elif urls is not None:
-                        link = str(urls)
                 channel_list.append(
                     {
                         "name": ch.get("name") or f"channel_{len(channel_list) + 1}",
-                        "link": link,
+                        "link": destination_url(ch.get("feed_destinations")),
                     }
                 )
             self.log.emit(f"Fetched {len(channel_list)} channels.")
